@@ -2,18 +2,21 @@
 main.py — BackupTool GUI (CustomTkinter)
 
 Abas:
-  1 · Origem      — paths e exclusões
+  2 · Origens      — paths e exclusões
   3 · Destino     — HD externo / pasta de rede
   4 · Resumo      — scan pré-backup
-  5 · Progresso   — execução do backup
+  5 · Backup   — execução do backup
   6 · Restaurar   — restauração a partir de manifest.json
 """
 
 import os
 import platform
+import shutil
 import socket
+import subprocess
 import threading
 import tkinter as tk
+import time
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
@@ -42,23 +45,34 @@ from core.profiles import detect_user_profiles, UserProfile
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-ACCENT     = "#3B82F6"
-BG_DARK    = "#0F172A"
-BG_CARD    = "#1E293B"
-BG_INPUT   = "#334155"
-TEXT_MAIN  = "#F1F5F9"
-TEXT_MUTED = "#94A3B8"
-SUCCESS    = "#22C55E"
-WARNING    = "#F59E0B"
-ERROR_CLR  = "#EF4444"
-RESTORE_CL = "#A78BFA"   # violeta — identifica visualmente a aba de restauração
+ACCENT     = "#2563EB"
+ACCENT_HOVER = "#1D4ED8"
+BG_DARK    = "#111827"
+BG_CARD    = "#1F2937"
+BG_PANEL   = "#273449"
+BG_INPUT   = "#374151"
+TEXT_MAIN  = "#F9FAFB"
+TEXT_MUTED = "#CBD5E1"
+SUCCESS    = "#16A34A"
+WARNING    = "#D97706"
+ERROR_CLR  = "#DC2626"
+RESTORE_CL = "#0D9488"
 
-FONT_TITLE = ("Inter", 20, "bold")
-FONT_LABEL = ("Inter", 12)
-FONT_SMALL = ("Inter", 11)
+FONT_TITLE = ("Inter", 22, "bold")
+FONT_SECTION = ("Inter", 15, "bold")
+FONT_LABEL = ("Inter", 13)
+FONT_SMALL = ("Inter", 12)
 FONT_MONO  = ("JetBrains Mono", 10) if platform.system() != "Darwin" else ("Menlo", 10)
 
-TABS = ["1 · Origem", "2 · Usuários", "3 · Destino", "4 · Resumo", "5 · Progresso", "6 · Restaurar"]
+TABS = ["1 · Usuários", "2 · Origens", "3 · Destino", "4 · Resumo", "5 · Backup", "6 · Restaurar"]
+TAB_DESCRIPTIONS = {
+    "1 · Usuários": "Escolha quais perfis entram no backup.",
+    "2 · Origens": "Revise pastas padrão, pastas extras e exclusões.",
+    "3 · Destino": "Selecione onde o backup será salvo.",
+    "4 · Resumo": "Confira usuários, arquivos, tamanho e destino antes de iniciar.",
+    "5 · Backup": "Acompanhe a execução em tempo real.",
+    "6 · Restaurar": "Valide um backup e restaure usuários para o destino corporativo.",
+}
 
 
 # ─────────────────────────────────────────────
@@ -67,7 +81,7 @@ TABS = ["1 · Origem", "2 · Usuários", "3 · Destino", "4 · Resumo", "5 · Pr
 class BackupApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("BackupTool — Backup & Restauração Pré-Formatação")
+        self.title("BackupTool")
         self.geometry("960x720")
         self.minsize(860, 620)
         self.configure(fg_color=BG_DARK)
@@ -79,6 +93,11 @@ class BackupApp(ctk.CTk):
         self.destination = ""
         self.scanned     = []
         self.scanned_by_user = {}
+        self.last_backup_dir = ""
+        self.last_report_path = ""
+        self.last_restore_report_path = ""
+        self._backup_started_at = 0.0
+        self._restore_started_at = 0.0
         self.user_profiles: list[UserProfile] = []
         self.selected_profiles: list[UserProfile] = []
         self._user_vars: dict[str, ctk.BooleanVar] = {}
@@ -94,21 +113,30 @@ class BackupApp(ctk.CTk):
         self._build_header()
         self._build_body()
         self._build_footer()
+        self._on_tab_change()
 
     # ══════════════════════════════════════════
     #  Layout base
     # ══════════════════════════════════════════
 
     def _build_header(self):
-        hdr = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=64)
+        hdr = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=78)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
         ctk.CTkLabel(hdr, text="💾  BackupTool",
                      font=FONT_TITLE, text_color=TEXT_MAIN
                      ).pack(side="left", padx=24, pady=16)
-        ctk.CTkLabel(hdr, text=f"Máquina: {socket.gethostname()}",
+        right = ctk.CTkFrame(hdr, fg_color="transparent")
+        right.pack(side="right", padx=24, pady=10)
+        self.lbl_step = ctk.CTkLabel(right, text="Etapa 1 de 6",
+                                     font=("Inter", 12, "bold"), text_color=ACCENT)
+        self.lbl_step.pack(anchor="e")
+        self.lbl_step_desc = ctk.CTkLabel(right, text=TAB_DESCRIPTIONS[TABS[0]],
+                                          font=FONT_SMALL, text_color=TEXT_MUTED)
+        self.lbl_step_desc.pack(anchor="e")
+        ctk.CTkLabel(right, text=f"Máquina: {socket.gethostname()}",
                      font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(side="right", padx=24)
+                     ).pack(anchor="e")
 
     def _build_body(self):
         self.tabview = ctk.CTkTabview(
@@ -116,16 +144,17 @@ class BackupApp(ctk.CTk):
             fg_color=BG_CARD,
             segmented_button_fg_color=BG_INPUT,
             segmented_button_selected_color=ACCENT,
-            segmented_button_selected_hover_color=ACCENT,
+            segmented_button_selected_hover_color=ACCENT_HOVER,
             text_color=TEXT_MAIN,
             corner_radius=12,
+            command=self._on_tab_change,
         )
         self.tabview.pack(fill="both", expand=True, padx=16, pady=(12, 4))
         for t in TABS:
             self.tabview.add(t)
 
-        self._build_tab_origem()
         self._build_tab_usuarios()
+        self._build_tab_origem()
         self._build_tab_destino()
         self._build_tab_resumo()
         self._build_tab_progresso()
@@ -140,25 +169,130 @@ class BackupApp(ctk.CTk):
             fg_color=BG_INPUT, hover_color=BG_INPUT,
             text_color=TEXT_MUTED, command=self._go_back)
         self.btn_back.pack(side="left", padx=16, pady=10)
+        self.btn_restart = ctk.CTkButton(
+            foot, text="Reiniciar Processo", width=160,
+            fg_color=BG_INPUT, hover_color=BG_PANEL,
+            text_color=TEXT_MUTED, command=self._restart_process)
+        self.btn_restart.pack(side="left", padx=(0, 16), pady=10)
         self.btn_next = ctk.CTkButton(
             foot, text="Próximo →", width=160,
-            fg_color=ACCENT, hover_color="#2563EB",
+            fg_color=ACCENT, hover_color=ACCENT_HOVER,
             text_color="white", command=self._go_next)
         self.btn_next.pack(side="right", padx=16, pady=10)
 
+    def _screen_intro(self, parent, title, description, accent=ACCENT):
+        ctk.CTkLabel(parent, text=title, font=FONT_SECTION,
+                     text_color=TEXT_MAIN).pack(anchor="w", padx=4, pady=(8, 2))
+        ctk.CTkLabel(parent, text=description, font=FONT_SMALL,
+                     text_color=TEXT_MUTED, wraplength=900, justify="left"
+                     ).pack(anchor="w", padx=4, pady=(0, 10))
+
+    def _on_tab_change(self):
+        current = self.tabview.get()
+        index = self._current_tab_index() + 1
+        self.lbl_step.configure(text=f"Etapa {index} de {len(TABS)}")
+        self.lbl_step_desc.configure(text=TAB_DESCRIPTIONS.get(current, ""))
+        self.btn_back.configure(state="normal" if index > 1 else "disabled")
+        self.btn_next.configure(state="normal" if index < len(TABS) else "disabled")
+
+    def _format_duration(self, seconds):
+        seconds = max(0, int(seconds))
+        mins, secs = divmod(seconds, 60)
+        hours, mins = divmod(mins, 60)
+        if hours:
+            return f"{hours}h {mins:02d}min"
+        if mins:
+            return f"{mins}min {secs:02d}s"
+        return f"{secs}s"
+
+    def _estimate_remaining(self, started_at, processed, total):
+        if not started_at or processed <= 0 or total <= 0:
+            return "calculando..."
+        elapsed = time.time() - started_at
+        remaining = (elapsed / processed) * max(total - processed, 0)
+        return self._format_duration(remaining)
+
+    def _short_path(self, path, limit=88):
+        if not path:
+            return "Aguardando arquivo..."
+        return path if len(path) <= limit else "..." + path[-(limit - 3):]
+
+    def _friendly_error(self, message):
+        text = str(message)
+        if "Permission" in text or "permiss" in text.lower() or "access" in text.lower():
+            return "Acesso negado. Verifique permissões no destino selecionado."
+        if "No space" in text or "space" in text.lower():
+            return "Espaço insuficiente no destino selecionado."
+        if "manifest" in text.lower():
+            return "Não foi possível validar o backup selecionado."
+        return text
+
+    def _validate_backup_ready(self):
+        valid, msg = validate_destination(self.destination)
+        if not valid:
+            messagebox.showerror("Destino não está pronto", self._friendly_error(msg))
+            return False
+        try:
+            free = shutil.disk_usage(self.destination).free
+            required = total_size(self.scanned)
+            if required > free:
+                messagebox.showerror(
+                    "Espaço insuficiente",
+                    f"O destino possui {human_size(free)} livres, mas o backup precisa de aproximadamente {human_size(required)}."
+                )
+                return False
+        except OSError:
+            messagebox.showwarning(
+                "Não foi possível conferir o espaço",
+                "O destino será usado, mas não foi possível confirmar o espaço livre antes de iniciar."
+            )
+        return True
+
+    def _open_path(self, path):
+        if not path:
+            messagebox.showinfo("Nada para abrir", "Nenhum relatório ou pasta disponível ainda.")
+            return
+        try:
+            if platform.system() == "Windows":
+                os.startfile(path)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            messagebox.showerror("Não foi possível abrir", self._friendly_error(e))
+
+    def _restart_process(self):
+        self._stop_flag = True
+        self._restore_stop = True
+        self.scanned = []
+        self.scanned_by_user = {}
+        self.destination = ""
+        self.last_backup_dir = ""
+        self.last_report_path = ""
+        self.last_restore_report_path = ""
+        self.progressbar.set(0)
+        self.restore_progressbar.set(0)
+        self.lbl_status_final.configure(text="")
+        self.lbl_restore_status.configure(text="")
+        self._log_clear()
+        self._restore_log_clear()
+        if hasattr(self, "dest_entry"):
+            self.dest_entry.delete(0, "end")
+        self.tabview.set(TABS[0])
+        self._on_tab_change()
+
     # ══════════════════════════════════════════
-    #  Aba 1 — Origem
+    #  Aba 2 — Origens
     # ══════════════════════════════════════════
 
     def _build_tab_origem(self):
-        tab = self.tabview.tab("1 · Origem")
-        ctk.CTkLabel(tab, text="Pastas para backup",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
-        ctk.CTkLabel(tab,
-                     text="Pré-definidas com base no sistema. Adicione ou remova conforme necessário.",
-                     font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(anchor="w", padx=4, pady=(0, 8))
+        tab = self.tabview.tab("2 · Origens")
+        self._screen_intro(
+            tab,
+            "Origens do backup",
+            "Revise as pastas padrão e adicione locais extras somente quando necessário."
+        )
 
         self.paths_frame = ctk.CTkScrollableFrame(tab, fg_color=BG_INPUT,
                                                    corner_radius=8, height=180)
@@ -171,8 +305,8 @@ class BackupApp(ctk.CTk):
                       hover_color="#2563EB", command=self._add_path, width=160
                       ).pack(side="left")
 
-        ctk.CTkLabel(tab, text="Exclusões",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
+        ctk.CTkLabel(tab, text="Exclusões aplicadas",
+                     font=FONT_SECTION, text_color=TEXT_MAIN
                      ).pack(anchor="w", padx=4, pady=(0, 2))
         ctk.CTkLabel(tab, text="Pastas e extensões ignoradas durante o scan.",
                      font=FONT_SMALL, text_color=TEXT_MUTED
@@ -212,14 +346,12 @@ class BackupApp(ctk.CTk):
     # ══════════════════════════════════════════
 
     def _build_tab_usuarios(self):
-        tab = self.tabview.tab("2 · Usuários")
-        ctk.CTkLabel(tab, text="Usuários encontrados",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
-        ctk.CTkLabel(tab,
-                     text="Selecione os perfis corporativos que serão incluídos no backup.",
-                     font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(anchor="w", padx=4, pady=(0, 8))
+        tab = self.tabview.tab("1 · Usuários")
+        self._screen_intro(
+            tab,
+            "Seleção de usuários",
+            "Escolha os perfis detectados automaticamente nesta máquina."
+        )
 
         self.users_frame = ctk.CTkScrollableFrame(tab, fg_color=BG_INPUT,
                                                   corner_radius=8, height=300)
@@ -284,9 +416,11 @@ class BackupApp(ctk.CTk):
 
     def _build_tab_destino(self):
         tab = self.tabview.tab("3 · Destino")
-        ctk.CTkLabel(tab, text="Onde salvar o backup",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
+        self._screen_intro(
+            tab,
+            "Destino do backup",
+            "Use um dispositivo detectado ou selecione uma pasta de rede/local com espaço suficiente."
+        )
 
         ctk.CTkLabel(tab, text="Dispositivos detectados",
                      font=FONT_SMALL, text_color=TEXT_MUTED
@@ -301,8 +435,8 @@ class BackupApp(ctk.CTk):
                       ).pack(anchor="w", padx=4, pady=(0, 12))
         self._refresh_drives()
 
-        ctk.CTkLabel(tab, text="Ou digitar caminho manualmente",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
+        ctk.CTkLabel(tab, text="Selecionar outro local",
+                     font=FONT_SECTION, text_color=TEXT_MAIN
                      ).pack(anchor="w", padx=4, pady=(0, 4))
         row = ctk.CTkFrame(tab, fg_color="transparent")
         row.pack(fill="x", padx=4)
@@ -357,15 +491,17 @@ class BackupApp(ctk.CTk):
 
     def _build_tab_resumo(self):
         tab = self.tabview.tab("4 · Resumo")
-        ctk.CTkLabel(tab, text="Revisão antes do backup",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
+        self._screen_intro(
+            tab,
+            "Resumo e validação",
+            "Confira usuários, arquivos, tamanho estimado, destino e exclusões antes de executar."
+        )
         self.resumo_box = ctk.CTkTextbox(tab, font=FONT_MONO,
                                           fg_color=BG_INPUT, text_color=TEXT_MAIN,
                                           state="disabled")
         self.resumo_box.pack(fill="both", expand=True, padx=4, pady=(4, 8))
-        self.btn_scan = ctk.CTkButton(tab, text="🔍  Escanear agora",
-                                       fg_color=ACCENT, hover_color="#2563EB",
+        self.btn_scan = ctk.CTkButton(tab, text="Validar e gerar resumo",
+                                       fg_color=ACCENT, hover_color=ACCENT_HOVER,
                                        command=self._start_scan)
         self.btn_scan.pack(pady=(0, 4))
 
@@ -379,7 +515,7 @@ class BackupApp(ctk.CTk):
             return
         self.destination = dest
         self.btn_scan.configure(state="disabled", text="Escaneando...")
-        self._set_resumo("⏳ Escaneando arquivos, aguarde...\n")
+        self._set_resumo("Preparando resumo. A varredura pode levar alguns minutos em perfis grandes.\n")
         threading.Thread(target=self._scan_thread, daemon=True).start()
 
     def _scan_thread(self):
@@ -388,12 +524,12 @@ class BackupApp(ctk.CTk):
             count[0] += 1
             if count[0] % 50 == 0:
                 self.after(0, lambda: self._set_resumo(
-                    f"⏳ Encontrados: {count[0]} arquivos...\n"))
+                    f"Varredura em andamento\n\nArquivos encontrados: {count[0]}\nA interface continua ativa."))
 
         self.scanned_by_user = {}
         if self.selected_profiles:
             self.scanned = []
-            lines = ["✔  Scan concluído\n", f"   Destino              : {self.destination}", ""]
+            lines = ["Resumo pronto\n", f"Destino escolhido: {self.destination}", ""]
             total_b = 0
             for profile in self.selected_profiles:
                 entries = scan_profile_path(profile.path, self.exclusions, self.excl_exts, on_file)
@@ -401,34 +537,44 @@ class BackupApp(ctk.CTk):
                 self.scanned.extend(entries)
                 user_total = total_size(entries)
                 total_b += user_total
-                lines.append(f"   {profile.username}: {len(entries)} arquivos · {human_size(user_total)}")
+                lines.append(f"{profile.username}: {len(entries)} arquivos · {human_size(user_total)}")
             lines.extend([
                 "",
-                f"   Arquivos encontrados : {len(self.scanned)}",
-                f"   Tamanho total        : {human_size(total_b)}",
-                "", "── Usuários incluídos ──",
+                f"Arquivos encontrados: {len(self.scanned)}",
+                f"Tamanho estimado: {human_size(total_b)}",
+                "", "Usuários selecionados",
             ])
-            lines.extend([f"  {p.username}  —  {p.path}" for p in self.selected_profiles])
+            lines.extend([f"- {p.username}" for p in self.selected_profiles])
         else:
             self.scanned = scan_paths(self.paths, self.exclusions, self.excl_exts, on_file)
             total_b = total_size(self.scanned)
             lines = [
-                "✔  Scan concluído\n",
-                f"   Arquivos encontrados : {len(self.scanned)}",
-                f"   Tamanho total        : {human_size(total_b)}",
-                f"   Destino              : {self.destination}",
-                "", "── Pastas incluídas ──",
-            ] + [f"  {p}" for p in self.paths]
+                "Resumo pronto\n",
+                f"Arquivos encontrados: {len(self.scanned)}",
+                f"Tamanho estimado: {human_size(total_b)}",
+                f"Destino escolhido: {self.destination}",
+                "", "Pastas incluídas",
+            ] + [f"- {p}" for p in self.paths]
+
+        try:
+            free = shutil.disk_usage(self.destination).free
+            lines.extend(["", f"Espaço livre no destino: {human_size(free)}"])
+        except OSError:
+            lines.extend(["", "Espaço livre no destino: não foi possível verificar"])
+        lines.extend(["", "Exclusões aplicadas"])
+        lines.extend([f"- {item}" for item in self.exclusions[:12]])
+        if len(self.exclusions) > 12:
+            lines.append(f"- ... e mais {len(self.exclusions) - 12} exclusões")
 
         lines += [
-            "", "── Primeiros 20 arquivos ──",
-        ] + [f"  {e.relative_path}  ({human_size(e.size)})" for e in self.scanned[:20]]
+            "", "Primeiros arquivos encontrados",
+        ] + [f"- {e.relative_path} ({human_size(e.size)})" for e in self.scanned[:20]]
         if len(self.scanned) > 20:
-            lines.append(f"  ... e mais {len(self.scanned) - 20} arquivos")
+            lines.append(f"- ... e mais {len(self.scanned) - 20} arquivos")
 
         self.after(0, lambda: self._set_resumo("\n".join(lines)))
         self.after(0, lambda: self.btn_scan.configure(
-            state="normal", text="🔍  Escanear novamente"))
+            state="normal", text="Atualizar resumo"))
 
     def _set_resumo(self, text):
         self.resumo_box.configure(state="normal")
@@ -441,22 +587,36 @@ class BackupApp(ctk.CTk):
     # ══════════════════════════════════════════
 
     def _build_tab_progresso(self):
-        tab = self.tabview.tab("5 · Progresso")
-        ctk.CTkLabel(tab, text="Executando backup",
-                     font=("Inter", 13, "bold"), text_color=TEXT_MAIN
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
+        tab = self.tabview.tab("5 · Backup")
+        self._screen_intro(
+            tab,
+            "Execução do backup",
+            "Acompanhe usuário atual, arquivo processado, progresso e tempo estimado restante."
+        )
 
-        self.lbl_current = ctk.CTkLabel(tab, text="Aguardando início...",
-                                         font=FONT_SMALL, text_color=TEXT_MUTED,
-                                         anchor="w", wraplength=880)
-        self.lbl_current.pack(fill="x", padx=4, pady=(4, 2))
+        status_grid = ctk.CTkFrame(tab, fg_color=BG_PANEL, corner_radius=8)
+        status_grid.pack(fill="x", padx=4, pady=(0, 8))
+        status_grid.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.lbl_backup_user = ctk.CTkLabel(status_grid, text="Usuário atual\nAguardando início",
+                                            font=FONT_SMALL, text_color=TEXT_MAIN,
+                                            justify="left", anchor="w")
+        self.lbl_backup_user.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
+        self.lbl_current = ctk.CTkLabel(status_grid, text="Arquivo atual\nAguardando início",
+                                        font=FONT_SMALL, text_color=TEXT_MAIN,
+                                        justify="left", anchor="w", wraplength=360)
+        self.lbl_current.grid(row=0, column=1, sticky="ew", padx=12, pady=10)
+        self.lbl_backup_time = ctk.CTkLabel(status_grid, text="Tempo\n0s · restante calculando...",
+                                            font=FONT_SMALL, text_color=TEXT_MAIN,
+                                            justify="left", anchor="w")
+        self.lbl_backup_time.grid(row=0, column=2, sticky="ew", padx=12, pady=10)
 
         self.progressbar = ctk.CTkProgressBar(tab, height=16,
                                                fg_color=BG_INPUT, progress_color=ACCENT)
         self.progressbar.pack(fill="x", padx=4, pady=(2, 4))
         self.progressbar.set(0)
 
-        self.lbl_counter = ctk.CTkLabel(tab, text="0 / 0",
+        self.lbl_counter = ctk.CTkLabel(tab, text="Progresso: 0 / 0 arquivos",
                                          font=FONT_SMALL, text_color=TEXT_MUTED)
         self.lbl_counter.pack(anchor="e", padx=4)
 
@@ -467,15 +627,25 @@ class BackupApp(ctk.CTk):
 
         row = ctk.CTkFrame(tab, fg_color="transparent")
         row.pack(fill="x", padx=4, pady=(0, 4))
-        self.btn_start = ctk.CTkButton(row, text="▶  Iniciar backup",
+        self.btn_start = ctk.CTkButton(row, text="Iniciar Backup",
                                         fg_color=SUCCESS, hover_color="#16A34A",
                                         command=self._start_backup, width=160)
         self.btn_start.pack(side="left")
-        self.btn_stop = ctk.CTkButton(row, text="⏹  Parar",
+        self.btn_stop = ctk.CTkButton(row, text="Cancelar Backup",
                                        fg_color=ERROR_CLR, hover_color="#B91C1C",
-                                       command=self._stop_backup, width=100,
+                                       command=self._stop_backup, width=150,
                                        state="disabled")
         self.btn_stop.pack(side="left", padx=8)
+        ctk.CTkButton(row, text="Abrir Relatório",
+                      fg_color=BG_INPUT, hover_color=BG_PANEL,
+                      text_color=TEXT_MUTED,
+                      command=lambda: self._open_path(self.last_report_path),
+                      width=130).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Abrir Pasta",
+                      fg_color=BG_INPUT, hover_color=BG_PANEL,
+                      text_color=TEXT_MUTED,
+                      command=lambda: self._open_path(self.last_backup_dir),
+                      width=120).pack(side="left")
         self.lbl_status_final = ctk.CTkLabel(row, text="",
                                               font=("Inter", 12, "bold"),
                                               text_color=TEXT_MUTED)
@@ -486,10 +656,16 @@ class BackupApp(ctk.CTk):
             messagebox.showwarning("Scan necessário",
                                    "Execute o scan na aba Resumo antes de iniciar o backup.")
             return
+        if not self._validate_backup_ready():
+            return
         self._stop_flag = False
+        self._backup_started_at = time.time()
         self.btn_start.configure(state="disabled")
         self.btn_stop.configure(state="normal")
         self.lbl_status_final.configure(text="")
+        self.lbl_backup_user.configure(text="Usuário atual\nPreparando...")
+        self.lbl_current.configure(text="Arquivo atual\nPreparando...")
+        self.lbl_backup_time.configure(text="Tempo\n0s · restante calculando...")
         self._log_clear()
         threading.Thread(target=self._backup_thread, daemon=True).start()
 
@@ -535,23 +711,31 @@ class BackupApp(ctk.CTk):
         self.after(0, lambda: self._backup_done(result, report_path))
 
     def _update_progress(self, i, total, path):
-        self.progressbar.set(i / total)
-        self.lbl_counter.configure(text=f"{i} / {total}")
-        short = path if len(path) < 90 else "..." + path[-87:]
-        self.lbl_current.configure(text=short)
-        self._log_append(f"[{i:>5}/{total}] {path}\n")
+        self.progressbar.set(i / total if total else 0)
+        self.lbl_counter.configure(text=f"Progresso: {i} / {total} arquivos")
+        self.lbl_backup_user.configure(text="Usuário atual\nBackup manual")
+        self.lbl_current.configure(text=f"Arquivo atual\n{self._short_path(path)}")
+        elapsed = self._format_duration(time.time() - self._backup_started_at)
+        remaining = self._estimate_remaining(self._backup_started_at, i, total)
+        self.lbl_backup_time.configure(text=f"Tempo\n{elapsed} · restante {remaining}")
+        self._log_append(f"[{i:>5}/{total}] {os.path.basename(path)}\n")
 
     def _update_user_progress(self, user, i, total, path, copied, overall_total):
         self.progressbar.set(copied / overall_total if overall_total else 0)
-        self.lbl_counter.configure(text=f"{copied} / {overall_total}")
-        short = path if len(path) < 90 else "..." + path[-87:]
-        self.lbl_current.configure(text=f"Usuário: {user} | Arquivo: {short}")
-        self._log_append(f"[{copied:>5}/{overall_total}] {user}: {path}\n")
+        self.lbl_counter.configure(text=f"Progresso: {copied} / {overall_total} arquivos")
+        self.lbl_backup_user.configure(text=f"Usuário atual\n{user}")
+        self.lbl_current.configure(text=f"Arquivo atual\n{self._short_path(path)}")
+        elapsed = self._format_duration(time.time() - self._backup_started_at)
+        remaining = self._estimate_remaining(self._backup_started_at, copied, overall_total)
+        self.lbl_backup_time.configure(text=f"Tempo\n{elapsed} · restante {remaining}")
+        self._log_append(f"[{copied:>5}/{overall_total}] {user}: {os.path.basename(path)}\n")
 
     def _backup_done(self, result, report_path):
         self.progressbar.set(1)
         self.btn_start.configure(state="normal")
         self.btn_stop.configure(state="disabled")
+        self.last_backup_dir = result.backup_dir
+        self.last_report_path = report_path
 
         if result.errors == 0:
             color, msg = SUCCESS, f"✔ Concluído — {result.copied} arquivos copiados"
@@ -560,6 +744,9 @@ class BackupApp(ctk.CTk):
             msg = f"⚠ Concluído com erros — {result.copied} copiados, {result.errors} erros"
 
         self.lbl_status_final.configure(text=msg, text_color=color)
+        self.lbl_backup_time.configure(
+            text=f"Tempo\n{self._format_duration(time.time() - self._backup_started_at)} · concluído"
+        )
         self._log_append(f"\n{msg}\n")
         if result.manifest_path:
             self._log_append(f"manifest.json: {result.manifest_path}\n")
@@ -574,6 +761,8 @@ class BackupApp(ctk.CTk):
         self.progressbar.set(1)
         self.btn_start.configure(state="normal")
         self.btn_stop.configure(state="disabled")
+        self.last_backup_dir = result.backup_dir
+        self.last_report_path = report_path
 
         if result.errors == 0:
             color, msg = SUCCESS, f"✔ Concluído — {result.copied} arquivos copiados"
@@ -582,6 +771,9 @@ class BackupApp(ctk.CTk):
             msg = f"⚠ Concluído com erros — {result.copied} copiados, {result.errors} erros"
 
         self.lbl_status_final.configure(text=msg, text_color=color)
+        self.lbl_backup_time.configure(
+            text=f"Tempo\n{self._format_duration(result.elapsed_seconds)} · concluído"
+        )
         self._log_append(f"\n{msg}\n")
         self._log_append(f"Backup:        {result.backup_dir}\n")
         self._log_append(f"Relatório JSON: {report_path}\n")
@@ -616,22 +808,21 @@ class BackupApp(ctk.CTk):
     def _build_tab_restaurar(self):
         tab = self.tabview.tab("6 · Restaurar")
 
-        # ── Seção: Selecionar backup ──
-        ctk.CTkLabel(tab, text="Restaurar Backup",
-                     font=("Inter", 13, "bold"), text_color=RESTORE_CL
-                     ).pack(anchor="w", padx=4, pady=(8, 2))
-        ctk.CTkLabel(tab, text="Selecione a pasta de backup gerada pelo BackupTool.",
-                     font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(anchor="w", padx=4, pady=(0, 6))
+        self._screen_intro(
+            tab,
+            "Restauração",
+            "Selecione uma pasta de backup, valide os arquivos e acompanhe a restauração com segurança.",
+            accent=RESTORE_CL,
+        )
 
         row_src = ctk.CTkFrame(tab, fg_color="transparent")
         row_src.pack(fill="x", padx=4, pady=(0, 4))
         self.restore_src_entry = ctk.CTkEntry(
-            row_src, placeholder_text="Pasta do backup (contém manifest.json)",
+            row_src, placeholder_text="Pasta do backup",
             fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_INPUT)
         self.restore_src_entry.pack(side="left", fill="x", expand=True)
         ctk.CTkButton(row_src, text="Procurar", width=100,
-                      fg_color=RESTORE_CL, hover_color="#7C3AED",
+                      fg_color=RESTORE_CL, hover_color="#0F766E",
                       command=self._browse_restore_src
                       ).pack(side="right", padx=(8, 0))
 
@@ -639,6 +830,9 @@ class BackupApp(ctk.CTk):
                                                font=FONT_SMALL, text_color=TEXT_MUTED)
         self.lbl_manifest_info.pack(anchor="w", padx=4, pady=(2, 8))
 
+        ctk.CTkLabel(tab, text="Validação e mapeamento automático",
+                     font=FONT_SECTION, text_color=TEXT_MAIN
+                     ).pack(anchor="w", padx=4, pady=(0, 4))
         self.corporate_preview_frame = ctk.CTkScrollableFrame(
             tab, fg_color=BG_INPUT, corner_radius=8, height=110)
         self.corporate_preview_frame.pack(fill="x", padx=4, pady=(0, 8))
@@ -662,7 +856,7 @@ class BackupApp(ctk.CTk):
         ]:
             ctk.CTkRadioButton(pane_mode, text=label, variable=self.restore_mode,
                                value=val, text_color=TEXT_MAIN,
-                               fg_color=RESTORE_CL, hover_color="#7C3AED",
+                               fg_color=RESTORE_CL, hover_color="#0F766E",
                                command=self._on_restore_mode_change
                                ).pack(anchor="w", padx=12, pady=2)
         pane_mode.pack_configure(pady=(0, 0))
@@ -682,7 +876,7 @@ class BackupApp(ctk.CTk):
         ]:
             ctk.CTkRadioButton(pane_conf, text=label, variable=self.conflict_mode,
                                value=val, text_color=TEXT_MAIN,
-                               fg_color=RESTORE_CL, hover_color="#7C3AED",
+                               fg_color=RESTORE_CL, hover_color="#0F766E",
                                ).pack(anchor="w", padx=12, pady=2)
 
         # ── Destino alternativo (oculto por padrão) ──
@@ -697,7 +891,7 @@ class BackupApp(ctk.CTk):
             fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_INPUT)
         self.restore_alt_entry.pack(side="left", fill="x", expand=True)
         ctk.CTkButton(row_alt, text="Procurar", width=100,
-                      fg_color=RESTORE_CL, hover_color="#7C3AED",
+                      fg_color=RESTORE_CL, hover_color="#0F766E",
                       command=self._browse_alt_dest
                       ).pack(side="right", padx=(8, 0))
 
@@ -712,10 +906,22 @@ class BackupApp(ctk.CTk):
         self._selection_vars: dict[str, ctk.BooleanVar] = {}
 
         # ── Barra de progresso da restauração ──
+        restore_status = ctk.CTkFrame(tab, fg_color=BG_PANEL, corner_radius=8)
+        restore_status.pack(fill="x", padx=4, pady=(4, 8))
+        restore_status.grid_columnconfigure((0, 1, 2), weight=1)
+        self.lbl_restore_user = ctk.CTkLabel(
+            restore_status, text="Usuário atual\nAguardando início",
+            font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_restore_user.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
         self.lbl_restore_current = ctk.CTkLabel(
-            tab, text="", font=FONT_SMALL, text_color=TEXT_MUTED,
-            anchor="w", wraplength=880)
-        self.lbl_restore_current.pack(fill="x", padx=4, pady=(4, 2))
+            restore_status, text="Arquivo atual\nAguardando início",
+            font=FONT_SMALL, text_color=TEXT_MAIN,
+            anchor="w", justify="left", wraplength=360)
+        self.lbl_restore_current.grid(row=0, column=1, sticky="ew", padx=12, pady=10)
+        self.lbl_restore_time = ctk.CTkLabel(
+            restore_status, text="Tempo\n0s · restante calculando...",
+            font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_restore_time.grid(row=0, column=2, sticky="ew", padx=12, pady=10)
 
         self.restore_progressbar = ctk.CTkProgressBar(
             tab, height=14, fg_color=BG_INPUT, progress_color=RESTORE_CL)
@@ -723,7 +929,7 @@ class BackupApp(ctk.CTk):
         self.restore_progressbar.set(0)
 
         self.lbl_restore_counter = ctk.CTkLabel(
-            tab, text="", font=FONT_SMALL, text_color=TEXT_MUTED)
+            tab, text="Progresso: 0 / 0 arquivos", font=FONT_SMALL, text_color=TEXT_MUTED)
         self.lbl_restore_counter.pack(anchor="e", padx=4)
 
         self.restore_log = ctk.CTkTextbox(
@@ -736,16 +942,21 @@ class BackupApp(ctk.CTk):
         btn_row.pack(fill="x", padx=4, pady=(0, 4))
 
         self.btn_restore_start = ctk.CTkButton(
-            btn_row, text="♻  Iniciar restauração",
-            fg_color=RESTORE_CL, hover_color="#7C3AED",
+            btn_row, text="Iniciar Restauração",
+            fg_color=RESTORE_CL, hover_color="#0F766E",
             command=self._start_restore, width=180)
         self.btn_restore_start.pack(side="left")
 
         self.btn_restore_stop = ctk.CTkButton(
-            btn_row, text="⏹  Parar",
+            btn_row, text="Cancelar Restauração",
             fg_color=ERROR_CLR, hover_color="#B91C1C",
-            command=self._stop_restore, width=100, state="disabled")
+            command=self._stop_restore, width=180, state="disabled")
         self.btn_restore_stop.pack(side="left", padx=8)
+        ctk.CTkButton(btn_row, text="Abrir Relatório",
+                      fg_color=BG_INPUT, hover_color=BG_PANEL,
+                      text_color=TEXT_MUTED,
+                      command=lambda: self._open_path(self.last_restore_report_path),
+                      width=130).pack(side="left", padx=(0, 8))
 
         self.lbl_restore_status = ctk.CTkLabel(
             btn_row, text="", font=("Inter", 12, "bold"), text_color=TEXT_MUTED)
@@ -806,11 +1017,11 @@ class BackupApp(ctk.CTk):
         except FileNotFoundError:
             self._restore_manifest = None
             self.lbl_manifest_info.configure(
-                text="✗ manifest.json não encontrado nesta pasta.", text_color=ERROR_CLR)
+                text="Backup não reconhecido. Selecione a pasta criada pelo BackupTool.", text_color=ERROR_CLR)
         except Exception as e:
             self._restore_manifest = None
             self.lbl_manifest_info.configure(
-                text=f"✗ Erro ao ler manifest: {e}", text_color=ERROR_CLR)
+                text=self._friendly_error(e), text_color=ERROR_CLR)
 
     def _populate_corporate_preview(self):
         for w in self.corporate_preview_frame.winfo_children():
@@ -853,9 +1064,13 @@ class BackupApp(ctk.CTk):
     def _start_restore(self):
         if self._corporate_restore_plans:
             self._restore_stop = False
+            self._restore_started_at = time.time()
             self.btn_restore_start.configure(state="disabled")
             self.btn_restore_stop.configure(state="normal")
             self.lbl_restore_status.configure(text="")
+            self.lbl_restore_user.configure(text="Usuário atual\nPreparando...")
+            self.lbl_restore_current.configure(text="Arquivo atual\nPreparando...")
+            self.lbl_restore_time.configure(text="Tempo\n0s · restante calculando...")
             self._restore_log_clear()
             self.restore_progressbar.set(0)
 
@@ -899,9 +1114,13 @@ class BackupApp(ctk.CTk):
                         break
 
         self._restore_stop = False
+        self._restore_started_at = time.time()
         self.btn_restore_start.configure(state="disabled")
         self.btn_restore_stop.configure(state="normal")
         self.lbl_restore_status.configure(text="")
+        self.lbl_restore_user.configure(text="Usuário atual\nBackup manual")
+        self.lbl_restore_current.configure(text="Arquivo atual\nPreparando...")
+        self.lbl_restore_time.configure(text="Tempo\n0s · restante calculando...")
         self._restore_log_clear()
         self.restore_progressbar.set(0)
 
@@ -987,22 +1206,29 @@ class BackupApp(ctk.CTk):
 
     def _update_restore_progress(self, i, total, path):
         self.restore_progressbar.set(i / total if total else 0)
-        self.lbl_restore_counter.configure(text=f"{i} / {total}")
-        short = path if len(path) < 90 else "..." + path[-87:]
-        self.lbl_restore_current.configure(text=f"Restaurando: {short}")
-        self._restore_log_append(f"[{i:>5}/{total}] {path}\n")
+        self.lbl_restore_counter.configure(text=f"Progresso: {i} / {total} arquivos")
+        self.lbl_restore_user.configure(text="Usuário atual\nBackup manual")
+        self.lbl_restore_current.configure(text=f"Arquivo atual\n{self._short_path(path)}")
+        elapsed = self._format_duration(time.time() - self._restore_started_at)
+        remaining = self._estimate_remaining(self._restore_started_at, i, total)
+        self.lbl_restore_time.configure(text=f"Tempo\n{elapsed} · restante {remaining}")
+        self._restore_log_append(f"[{i:>5}/{total}] {os.path.basename(path)}\n")
 
     def _update_corporate_restore_progress(self, user, i, total, path, done, overall_total):
         self.restore_progressbar.set(done / overall_total if overall_total else 0)
-        self.lbl_restore_counter.configure(text=f"{done} / {overall_total}")
-        short = path if len(path) < 90 else "..." + path[-87:]
-        self.lbl_restore_current.configure(text=f"Usuário: {user} | Arquivo: {short}")
-        self._restore_log_append(f"[{done:>5}/{overall_total}] {user}: {path}\n")
+        self.lbl_restore_counter.configure(text=f"Progresso: {done} / {overall_total} arquivos")
+        self.lbl_restore_user.configure(text=f"Usuário atual\n{user}")
+        self.lbl_restore_current.configure(text=f"Arquivo atual\n{self._short_path(path)}")
+        elapsed = self._format_duration(time.time() - self._restore_started_at)
+        remaining = self._estimate_remaining(self._restore_started_at, done, overall_total)
+        self.lbl_restore_time.configure(text=f"Tempo\n{elapsed} · restante {remaining}")
+        self._restore_log_append(f"[{done:>5}/{overall_total}] {user}: {os.path.basename(path)}\n")
 
     def _restore_done(self, result: RestoreResult, json_path: str, csv_path: str):
         self.restore_progressbar.set(1)
         self.btn_restore_start.configure(state="normal")
         self.btn_restore_stop.configure(state="disabled")
+        self.last_restore_report_path = json_path
 
         parts = [f"✔ {result.restored} restaurados"]
         if result.overwritten:  parts.append(f"{result.overwritten} sobrescritos")
@@ -1013,6 +1239,9 @@ class BackupApp(ctk.CTk):
         color = SUCCESS if (result.corrupted + result.errors) == 0 else WARNING
         msg = " · ".join(parts) + f" ({result.elapsed_seconds:.1f}s)"
         self.lbl_restore_status.configure(text=msg, text_color=color)
+        self.lbl_restore_time.configure(
+            text=f"Tempo\n{self._format_duration(result.elapsed_seconds)} · concluído"
+        )
 
         self._restore_log_append(f"\n{msg}\n")
         self._restore_log_append(f"Relatório JSON : {json_path}\n")
@@ -1034,6 +1263,7 @@ class BackupApp(ctk.CTk):
         self.restore_progressbar.set(1)
         self.btn_restore_start.configure(state="normal")
         self.btn_restore_stop.configure(state="disabled")
+        self.last_restore_report_path = json_path
 
         parts = [f"✔ {result.restored} restaurados"]
         if result.overwritten:  parts.append(f"{result.overwritten} sobrescritos")
@@ -1044,6 +1274,9 @@ class BackupApp(ctk.CTk):
         color = SUCCESS if (result.corrupted + result.errors) == 0 else WARNING
         msg = " · ".join(parts) + f" ({result.elapsed_seconds:.1f}s)"
         self.lbl_restore_status.configure(text=msg, text_color=color)
+        self.lbl_restore_time.configure(
+            text=f"Tempo\n{self._format_duration(result.elapsed_seconds)} · concluído"
+        )
 
         self._restore_log_append(f"\n{msg}\n")
         self._restore_log_append(f"Relatório JSON : {json_path}\n")
@@ -1079,11 +1312,13 @@ class BackupApp(ctk.CTk):
         i = self._current_tab_index()
         if i < len(TABS) - 1:
             self.tabview.set(TABS[i + 1])
+            self._on_tab_change()
 
     def _go_back(self):
         i = self._current_tab_index()
         if i > 0:
             self.tabview.set(TABS[i - 1])
+            self._on_tab_change()
 
     # ══════════════════════════════════════════
     #  Helpers
