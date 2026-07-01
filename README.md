@@ -1,6 +1,6 @@
 # BackupTool
 
-Ferramenta desktop para backup e restauração de perfis de usuário em estações de trabalho Windows e Linux, desenvolvida para suporte técnico em ambientes corporativos com domínio Active Directory.
+Ferramenta desktop para backup e restauração de perfis de usuário em estações de trabalho Windows e Linux, desenvolvida para suporte técnico em ambientes corporativos.
 
 ---
 
@@ -8,9 +8,9 @@ Ferramenta desktop para backup e restauração de perfis de usuário em estaçõ
 
 O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de formatações de estações de trabalho. A ferramenta automatiza o processo de identificação, cópia e restauração de arquivos de perfis de usuário, eliminando etapas manuais e reduzindo o risco de perda de dados durante procedimentos de reinstalação do sistema operacional.
 
-**Problema resolvido:** em ambientes corporativos com múltiplos usuários por máquina e perfis de domínio AD, o processo de backup pré-formatação é frequentemente manual, propenso a erros e sem rastreabilidade. O BackupTool padroniza esse processo, gera auditoria completa e viabiliza a restauração controlada posterior.
+**Problema resolvido:** em ambientes corporativos com múltiplos usuários por máquina, o processo de backup pré-formatação é frequentemente manual, propenso a erros e sem rastreabilidade. O BackupTool padroniza esse processo, gera auditoria completa e viabiliza a restauração controlada posterior.
 
-**Público-alvo:** técnicos de suporte de TI com privilégios administrativos em estações de trabalho Windows e Linux ingressadas em domínio Active Directory.
+**Público-alvo:** técnicos de suporte de TI com privilégios administrativos em estações de trabalho Windows e Linux.
 
 ---
 
@@ -334,17 +334,44 @@ Copiar os arquivos varridos para um diretório de backup estruturado, calculando
 4. Ao final, serializa o `manifest.json` na raiz do diretório de backup
 5. Gera relatório em `logs/backup_YYYYMMDD_HHMMSS.json` e `.csv`
 
+**Exemplo de manifest.json gerado:**
+
+```json
+{
+  "backup_date": "2026-01-15T10:30:00.123456",
+  "machine": "WORKSTATION-001",
+  "os": "Windows",
+  "total_files": 3,
+  "total_size": 204800,
+  "files": [
+    {
+      "source": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
+      "backup": "files\\a1b2c3d4_relatorio.pdf",
+      "size": 102400,
+      "sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "mtime": "2026-01-14T08:00:00"
+    },
+    {
+      "source": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
+      "backup": "files\\e5f6a1b2_notas.txt",
+      "size": 1024,
+      "sha256": "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
+      "mtime": "2026-01-13T17:45:00"
+    }
+  ]
+}
+```
+
 **Regras de Negócio**
 
 - O SHA-256 é calculado antes da cópia; arquivos onde o hash não pode ser calculado (sem permissão, bloqueados) são registrados como erro e não copiados
 - O nome do arquivo no backup é sempre único: o prefixo de hash previne colisões entre arquivos de mesmo nome em diretórios diferentes
 - O manifest é gerado somente se ao menos um arquivo foi copiado com sucesso
-- A estrutura de backup é criada atomicamente por execução (um novo diretório com timestamp por operação)
+- A estrutura de backup é criada por execução (um novo diretório com timestamp por operação)
 
 **Limitações**
 
 - Não implementa deduplicação entre execuções distintas de backup
-- O cálculo de SHA-256 por arquivo aumenta o tempo total de backup em relação a cópias simples
 - O backup é sempre completo (não incremental)
 
 ---
@@ -374,28 +401,28 @@ Recuperar arquivos de um backup existente para seus destinos, com verificação 
 | Modo | Comportamento |
 |---|---|
 | `all` | Restaura todos os arquivos para os caminhos originais registrados no manifest |
-| `selection` | Restaura apenas os arquivos cujo `source` corresponde à lista informada |
-| `alternate` | Restaura todos os arquivos para um diretório alternativo, preservando apenas o nome do arquivo (sem estrutura de subdiretórios) |
+| `selection` | Restaura apenas os arquivos cujo `source` corresponde às pastas selecionadas |
+| `alternate` | Restaura todos os arquivos para um diretório alternativo, preservando apenas o nome do arquivo |
 
 **Políticas de conflito:**
 
 | Política | Comportamento |
 |---|---|
 | `overwrite` | Substitui o arquivo existente sem confirmação |
-| `ask` | Exibe diálogo de confirmação para cada conflito; a thread de restauração aguarda a resposta via `threading.Event` |
+| `ask` | Exibe diálogo de confirmação para cada conflito |
 | `ignore` | Mantém o arquivo existente; registra como ignorado |
 
 **Regras de Negócio**
 
-- A verificação de integridade SHA-256 é executada sobre o arquivo no backup (não sobre o destino)
+- A verificação de integridade SHA-256 é executada sobre o arquivo no backup antes da cópia
 - Arquivos corrompidos são registrados individualmente; a operação continua para os demais
-- Arquivos ausentes no diretório `files/` (referenciados no manifest mas não encontrados em disco) são registrados como erro
+- Arquivos ausentes no diretório `files/` são registrados como erro
 - A criação de diretórios de destino é automática (`os.makedirs(..., exist_ok=True)`)
 
 **Limitações**
 
-- O modo `alternate` não preserva a estrutura de subdiretórios da origem; apenas o nome do arquivo é mantido
-- Sem suporte a restauração diferencial (apenas o estado completo registrado no manifest)
+- O modo `alternate` não preserva a estrutura de subdiretórios da origem
+- Sem suporte a restauração diferencial
 
 ---
 
@@ -419,7 +446,7 @@ Enumerar automaticamente drives externos e de rede disponíveis para uso como de
 
 **Regras de Negócio**
 
-- O destino pode ser informado manualmente (campo de texto livre) além da seleção automática
+- O destino pode ser informado manualmente além da seleção automática
 - A validação do destino verifica existência, permissão de escrita e tenta criar o diretório se não existir
 
 ---
@@ -428,7 +455,7 @@ Enumerar automaticamente drives externos e de rede disponíveis para uso como de
 
 **Objetivo**
 
-Identificar os nomes de usuário presentes no manifest a partir dos caminhos dos arquivos, para uso na interface de mapeamento de perfis de domínio AD.
+Identificar os nomes de usuário presentes no manifest a partir dos caminhos dos arquivos.
 
 **Fluxo de Funcionamento**
 
@@ -437,11 +464,6 @@ Identificar os nomes de usuário presentes no manifest a partir dos caminhos dos
 3. Para Linux: extrai `parts[2]` de paths com `parts[1] == "home"`
 4. Filtra perfis de sistema: `default`, `public`, `all users`, `defaultuser0`, `default user`, `administrator`, `guest`
 5. Retorna lista ordenada de nomes únicos
-
-**Regras de Negócio**
-
-- A comparação com perfis de sistema é case-insensitive
-- O resultado é utilizado para geração automática do mapeamento de domínio AD (`usuario` → `usuario.SANTACASABA`)
 
 ---
 
@@ -453,52 +475,59 @@ Produzir registros auditáveis de cada operação de backup e restauração.
 
 **Relatório de backup (`logs/backup_YYYYMMDD_HHMMSS.json` e `.csv`):**
 
-Campos registrados:
-
 ```json
 {
-  "timestamp": "ISO 8601",
-  "technician": "hostname da máquina do técnico",
-  "machine": "hostname da máquina backupeada",
-  "destination": "caminho do destino",
-  "backup_dir": "caminho completo do diretório criado",
-  "manifest": "caminho do manifest.json",
+  "timestamp": "2026-01-15T10:35:00.000000",
+  "technician": "NOTEBOOK-TECNICO-01",
+  "machine": "WORKSTATION-001",
+  "destination": "E:\\Backups",
+  "backup_dir": "E:\\Backups\\Backup_2026-01-15_103500",
+  "manifest": "E:\\Backups\\Backup_2026-01-15_103500\\manifest.json",
   "summary": {
-    "total_files_scanned": 0,
-    "files_copied": 0,
+    "total_files_scanned": 1250,
+    "files_copied": 1247,
     "files_skipped": 0,
-    "files_with_error": 0,
-    "total_size": "legível",
-    "total_size_bytes": 0
+    "files_with_error": 3,
+    "total_size": "4.2 GB",
+    "total_size_bytes": 4509715456
   },
-  "errors": [],
+  "errors": [
+    {
+      "file": "C:\\Users\\joao.silva\\Documents\\locked.docx",
+      "error": "Sem permissão: [Errno 13] Permission denied"
+    }
+  ],
   "files": []
 }
 ```
 
 **Relatório de restauração (`logs/restore_YYYYMMDD_HHMMSS.json` e `.csv`):**
 
-Campos registrados:
-
 ```json
 {
-  "timestamp": "ISO 8601",
-  "source_machine": "máquina de origem do backup",
-  "backup_date": "data do backup original",
-  "elapsed_seconds": 0.0,
+  "timestamp": "2026-01-16T09:00:00.000000",
+  "source_machine": "WORKSTATION-001",
+  "backup_date": "2026-01-15T10:30:00.123456",
+  "elapsed_seconds": 42.7,
   "summary": {
-    "restored": 0,
-    "skipped": 0,
+    "restored": 1245,
+    "skipped": 2,
     "overwritten": 0,
     "corrupted": 0,
     "errors": 0
   },
   "details": [
     {
-      "status": "restored|skipped|overwritten|corrupted|error",
-      "source": "caminho original",
-      "dest": "caminho de destino",
-      "reason": "descrição em caso de erro ou conflito"
+      "status": "restored",
+      "source": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
+      "dest": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
+      "reason": ""
+    },
+    {
+      "status": "skipped",
+      "source": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
+      "dest": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
+      "reason": "Conflito: arquivo ignorado"
     }
   ]
 }
@@ -542,9 +571,9 @@ Botões "Voltar" e "Próximo" para navegação sequencial entre abas.
 - Label com o caminho do arquivo sendo copiado no momento
 - Barra de progresso proporcional ao total de arquivos
 - Contador `N / Total`
-- Log em tempo real (área de texto somente leitura com rolagem automática)
-- Botão "Iniciar backup" e botão "Parar" (habilitado durante a execução)
-- Status final exibido após conclusão com contadores de copiados e erros
+- Log em tempo real com rolagem automática
+- Botões "Iniciar backup" e "Parar"
+- Status final com contadores de copiados e erros
 
 ### Aba 5 — Restaurar
 
@@ -580,7 +609,7 @@ Um flag booleano (`_stop_flag` para backup, `_restore_stop` para restauração) 
 ### Cálculo de hash
 
 - **SHA-256:** calculado por `hashlib.sha256` em blocos de 64 KB, utilizado para integridade no manifest e verificação pré-restauração
-- **MD5:** função `calculate_hash` presente em `scanner.py` mas não utilizada no fluxo principal; disponível para uso futuro
+- **MD5:** função `calculate_hash` presente em `scanner.py` disponível para uso futuro
 
 ### Manipulação de arquivos
 
@@ -618,10 +647,10 @@ A ferramenta não implementa autenticação própria. O controle de acesso é de
 ```
 BackupTool/
 └── logs/
-    ├── backup_YYYYMMDD_HHMMSS.json
-    ├── backup_YYYYMMDD_HHMMSS.csv
-    ├── restore_YYYYMMDD_HHMMSS.json
-    └── restore_YYYYMMDD_HHMMSS.csv
+    ├── backup_20260115_103500.json
+    ├── backup_20260115_103500.csv
+    ├── restore_20260116_090000.json
+    └── restore_20260116_090000.csv
 ```
 
 O diretório `logs/` é criado automaticamente na primeira operação e fica no mesmo diretório do executável.
@@ -643,11 +672,8 @@ O diretório `logs/` é criado automaticamente na primeira operação e fica no 
 Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JSON:
 
 ```json
-// Arquivos corrompidos na restauração
-{ "status": "corrupted", "reason": "SHA256 divergente: esperado abc123... obtido def456..." }
-
-// Arquivos com erro de permissão
-{ "status": "error", "reason": "Sem permissão: [Errno 13] Permission denied: '...'" }
+{ "status": "corrupted", "reason": "SHA256 divergente: esperado a1b2c3d4e5f6... obtido 9f8e7d6c5b4a..." }
+{ "status": "error", "reason": "Sem permissão: [Errno 13] Permission denied: 'C:\\...'" }
 ```
 
 ---
@@ -682,7 +708,7 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 ### Limitações identificadas
 
 - O backup é sempre completo, sem suporte a modo incremental ou diferencial
-- O cálculo de SHA-256 durante o backup aumenta o tempo total proporcional ao volume de dados; para volumes acima de dezenas de gigabytes, o tempo pode ser significativo em hardware mais antigo
+- O cálculo de SHA-256 durante o backup aumenta o tempo total proporcional ao volume de dados
 - O modo `alternate` na restauração não reconstrói a estrutura de subdiretórios
 - A detecção de drives no Linux depende de `lsblk`; ambientes sem `util-linux` podem não detectar dispositivos automaticamente
 - Não há controle de espaço em disco disponível no destino antes de iniciar o backup
@@ -692,7 +718,6 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 
 - Executar sempre com privilégios de administrador para garantir acesso a todos os perfis
 - Verificar espaço disponível no destino antes de iniciar o backup
-- Em ambiente de domínio AD, realizar a restauração antes do primeiro login do usuário para evitar criação de perfil duplicado com sufixo de domínio
 - Manter o diretório `logs/` para fins de auditoria após cada operação
 
 ---
@@ -701,11 +726,9 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 
 ### Estratégia de testes identificada
 
-Não há framework de testes automatizados (pytest, unittest) presente no repositório. Os testes identificados são scripts de validação ad hoc executados diretamente pelo interpretador Python.
+Não há framework de testes automatizados presente no repositório. Os testes identificados são scripts de validação ad hoc executados diretamente pelo interpretador Python.
 
-### Testes ad hoc identificados
-
-Os seguintes cenários foram validados diretamente via Python durante o desenvolvimento:
+### Cenários validados
 
 | Cenário | Resultado esperado |
 |---|---|
@@ -715,16 +738,15 @@ Os seguintes cenários foram validados diretamente via Python durante o desenvol
 | Restauração para destino alternativo | `restored == 1`, `errors == 0` |
 | Conflito com política `ignore` | `skipped == 1` |
 | Detecção de arquivo corrompido | `corrupted == 1`, arquivo não restaurado |
-| Geração de relatório JSON e CSV | Arquivos criados em `/tmp` |
+| Geração de relatório JSON e CSV | Arquivos criados com sucesso |
 
 ### Como executar validações manuais
 
 ```bash
 cd BackupTool
 
-# Validação de imports e lógica core
 python -c "
-from core.manifest import make_manifest, save_manifest, load_manifest, sha256_file, _safe_backup_name, ManifestEntry
+from core.manifest import make_manifest, save_manifest, load_manifest, sha256_file, ManifestEntry
 from core.restore import run_restore, generate_restore_report
 from core.backup import run_backup
 print('Imports OK')
@@ -769,19 +791,17 @@ O executável deve ser regenerado após qualquer alteração no código-fonte ou
 
 ## Roadmap
 
-Com base na arquitetura atual, as seguintes evoluções são plausíveis sem necessidade de reescrita estrutural:
-
 | Prioridade | Melhoria |
 |---|---|
-| Alta | Mapeamento automático de usuários de domínio AD (`usuario` → `usuario.SANTACASABA`) na tela de restauração |
 | Alta | Verificação de espaço disponível no destino antes de iniciar o backup |
 | Alta | Suporte a backup incremental utilizando o manifest como referência de estado anterior |
-| Média | Seleção de múltiplos perfis de usuário na tela de origem (suporte a máquinas compartilhadas) |
-| Média | Exportação do relatório diretamente para o destino do backup junto com o manifest |
-| Média | Suporte a destino via SSH/SFTP (substituindo dependência de mount do sistema operacional) |
+| Alta | Mapeamento de perfis de usuário entre máquinas na tela de restauração |
+| Média | Seleção de múltiplos perfis de usuário na tela de origem |
+| Média | Exportação do relatório para o destino do backup junto com o manifest |
+| Média | Suporte a destino via SSH/SFTP |
 | Baixa | Adição de ícone e metadados de versão no executável Windows |
 | Baixa | Framework de testes automatizados (pytest) cobrindo os módulos `core/` |
-| Baixa | Modo de linha de comando (CLI) sem dependência de interface gráfica, para uso em scripts de automação |
+| Baixa | Modo de linha de comando (CLI) sem dependência de interface gráfica |
 | Baixa | Histórico de backups: exibição de execuções anteriores na aba de restauração |
 
 ---
@@ -791,7 +811,7 @@ Com base na arquitetura atual, as seguintes evoluções são plausíveis sem nec
 ### Configuração do ambiente de desenvolvimento
 
 ```bash
-git clone <repositorio>
+git clone https://github.com/seu-usuario/BackupTool.git
 cd BackupTool
 python -m venv .venv
 source .venv/bin/activate  # Linux
@@ -855,11 +875,7 @@ Não identificado no código-fonte.
 
 - O campo `technician` nos relatórios de backup é populado com o hostname da máquina onde a ferramenta é executada (`socket.gethostname()`), não com o nome do técnico
 - A função `calculate_hash` em `core/scanner.py` utiliza MD5 e está presente no módulo mas não é chamada no fluxo principal; o hash efetivo utilizado é SHA-256 via `core/manifest.py`
-- O módulo `core/destinations.py` importa `shutil` implicitamente dentro da função `detect_external_drives` (Windows) sem declaração no topo do arquivo; isso não causa erro em Linux mas pode gerar `NameError` em Windows se `shutil` não estiver no escopo no momento da chamada
-- O modo de restauração `domain` está definido na assinatura de `run_restore` com suporte ao parâmetro `user_mapping`, mas a lógica de reescrita de path e a entrada correspondente na interface gráfica ainda não estão implementadas na versão atual
-- A verificação de integridade SHA-256 na restauração é executada sobre o arquivo armazenado no backup, não sobre o arquivo de origem original; portanto, detecta corrupção ocorrida após o backup mas não valida a integridade do arquivo original no momento em que foi backupeado
-- O formato de nome dos arquivos no backup (`<hash8>_<nome>`) usa apenas os primeiros 8 caracteres do SHA-256 como prefixo; colisões de prefixo são teoricamente possíveis, embora extremamente improváveis em volumes típicos de suporte
-
-
-
- 
+- O módulo `core/destinations.py` referencia `shutil.disk_usage()` no branch Windows sem declaração de `import shutil` no topo do arquivo; isso pode gerar `NameError` em execução no Windows
+- O modo de restauração `domain` está definido na assinatura de `run_restore` com o parâmetro `user_mapping`, mas a lógica de reescrita de path e a entrada correspondente na interface gráfica ainda não estão implementadas na versão atual
+- A verificação de integridade SHA-256 na restauração é executada sobre o arquivo armazenado no backup, não sobre o arquivo de origem original
+- O formato de nome dos arquivos no backup (`<hash8>_<nome>`) usa apenas os primeiros 8 caracteres do SHA-256 como prefixo; colisões de prefixo são teoricamente possíveis, embora extremamente improváveis em volumes típicos
