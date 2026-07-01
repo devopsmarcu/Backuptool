@@ -14,6 +14,18 @@ O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de format
 
 ---
 
+## Novidades na Versão Atual
+
+- **Interface Responsiva Completa**: adapta-se automaticamente a diferentes resoluções (de 1366x768 a telas ultrawide)
+- **DPI Awareness Moderna**: suporte a escalas de 100% a 200% no Windows, sem fontes borradas
+- **Sistema de Fontes Dinâmicas**: fontes escalonadas com base na resolução e DPI do monitor
+- **Layout Melhorado para Telas Ultrawide**: cards de resumo distribuídos em até 4 colunas para aproveitar espaço
+- **CTkScrollableFrame em Todas as Áreas Críticas**: nenhum conteúdo é cortado, mesmo com muitos itens
+- **Remoção de Larguras Fixas**: todos os widgets expandem para preencher o espaço disponível
+- **Cabeçalho Ajustado**: sem truncamento de texto no lado direito
+
+---
+
 ## Arquitetura da Solução
 
 ### Arquitetura identificada
@@ -38,13 +50,15 @@ Aplicação desktop monolítica com separação em camadas: interface gráfica (
 **Backup:**
 
 ```
-Técnico seleciona pastas (Aba 1)
+Técnico seleciona usuários (Aba 1)
       ↓
-Técnico seleciona destino (Aba 2)
+Técnico ajusta origens e exclusões (Aba 2)
       ↓
-Sistema escaneia arquivos e exibe resumo (Aba 3)
+Técnico seleciona destino (Aba 3)
       ↓
-Técnico confirma e inicia backup (Aba 4)
+Sistema escaneia arquivos e exibe resumo (Aba 4)
+      ↓
+Técnico confirma e inicia backup (Aba 5)
       ↓
 SHA-256 calculado por arquivo → cópia para Backup_YYYY-MM-DD_HHMMSS/files/
       ↓
@@ -54,7 +68,7 @@ manifest.json gravado + relatórios JSON e CSV gerados em logs/
 **Restauração:**
 
 ```
-Técnico seleciona pasta de backup (Aba 5)
+Técnico seleciona pasta de backup (Aba 6)
       ↓
 manifest.json carregado e validado
       ↓
@@ -73,7 +87,7 @@ Arquivos restaurados + relatórios JSON e CSV gerados em logs/
 
 ### Integrações existentes
 
-- **Windows API (ctypes):** enumeração de drives lógicos via `GetLogicalDrives` e `GetDriveTypeW`, leitura de rótulos via `GetVolumeInformationW`
+- **Windows API (ctypes):** enumeração de drives lógicos via `GetLogicalDrives` e `GetDriveTypeW`, leitura de rótulos via `GetVolumeInformationW`, DPI awareness via `SetProcessDpiAwareness`
 - **Linux (subprocess/lsblk):** detecção de dispositivos montados em `/media` e `/mnt`
 - Sem integrações com APIs externas, bancos de dados ou serviços de rede
 
@@ -113,7 +127,7 @@ Todas as demais dependências fazem parte da biblioteca padrão do Python (stdli
 
 ```
 BackupTool/
-├── main.py                  # Entry point e interface gráfica (5 abas)
+├── main.py                  # Entry point e interface gráfica (6 abas)
 ├── build.py                 # Script de empacotamento via PyInstaller
 ├── requirements.txt         # Dependências Python
 ├── README.md
@@ -154,6 +168,7 @@ BackupTool/
 | Privilégios | Administrador local | root ou sudo |
 | Python | 3.11 ou superior | 3.11 ou superior |
 | Dependências de sistema | Nenhuma adicional | `lsblk` (util-linux, presente por padrão) |
+| Resolução mínima | 1366x768 | 1366x768 |
 
 ### Requisitos para build do executável
 
@@ -241,8 +256,9 @@ dist, build, .next, venv, .venv, env
 
 Todos os parâmetros abaixo podem ser alterados diretamente pela interface antes de iniciar o backup:
 
+- Lista de usuários selecionados (detectados automaticamente)
 - Lista de pastas incluídas no backup (adição e remoção individual)
-- Lista de exclusões (editável como texto livre na Aba 1)
+- Lista de exclusões (editável como texto livre na Aba 2)
 
 ---
 
@@ -252,7 +268,7 @@ Todos os parâmetros abaixo podem ser alterados diretamente pela interface antes
 python main.py
 ```
 
-A interface abre na Aba 1 (Origem). A navegação entre abas pode ser feita pelos botões "Voltar" e "Próximo" no rodapé, ou clicando diretamente nas abas.
+A interface abre na Aba 1 (Usuários). A navegação entre abas pode ser feita pelos botões "Voltar" e "Próximo" no rodapé, ou clicando diretamente nas abas.
 
 ---
 
@@ -287,6 +303,20 @@ O script instala automaticamente `requirements.txt` e `pyinstaller` antes de exe
 ---
 
 ## Funcionalidades
+
+### Seleção de Usuários (Aba 1)
+
+**Objetivo**
+
+Detectar perfis de usuário corporativos na máquina e permitir a seleção de quais serão incluídos no backup.
+
+**Fluxo de Funcionamento**
+
+1. Detecta perfis de usuário no sistema operacional
+2. Exibe lista com checkboxes para seleção
+3. Botão "Selecionar Todos" para marcar todos de uma vez
+4. Botão "Atualizar Usuários" para re-detectar perfis
+5. Exibe contador de usuários selecionados
 
 ### Varredura de arquivos
 
@@ -537,54 +567,67 @@ Produzir registros auditáveis de cada operação de backup e restauração.
 
 ## Interface do Usuário
 
-A interface é composta por um cabeçalho fixo, um rodapé de navegação e cinco abas de conteúdo.
+A interface é composta por um cabeçalho fixo, um rodapé de navegação e seis abas de conteúdo.
 
 ### Cabeçalho
 
-Exibe o título da aplicação e o hostname da máquina em execução.
+- Exibe o título da aplicação e o hostname da máquina em execução
+- Indica a aba atual e a descrição correspondente
+- Sem truncamento de texto, adapta-se à largura disponível
 
 ### Rodapé
 
-Botões "Voltar" e "Próximo" para navegação sequencial entre abas.
+Botões "Voltar", "Reiniciar Processo" e "Próximo" para navegação sequencial entre abas.
 
-### Aba 1 — Origem
+### Aba 1 — Usuários
+
+- Lista scrollável de perfis de usuário detectados com checkbox por item
+- Botão "Selecionar Todos"
+- Botão "Atualizar Usuários"
+- Contador de usuários selecionados
+
+### Aba 2 — Origens
 
 - Lista scrollável de pastas selecionadas para backup, com botão de remoção individual
 - Botão para adicionar pasta via diálogo do sistema operacional
 - Campo de texto editável com as exclusões ativas (uma por linha)
 
-### Aba 2 — Destino
+### Aba 3 — Destino
 
-- Lista de dispositivos detectados automaticamente com botão "Usar" por item
+- Lista scrollável de dispositivos detectados automaticamente com botão "Usar" por item
 - Botão para atualizar a lista de dispositivos
 - Campo de texto livre para informar caminho manualmente (suporta caminhos UNC do Windows e caminhos Linux)
 - Botão "Procurar" para seleção via diálogo
 
-### Aba 3 — Resumo
+### Aba 4 — Resumo
 
-- Área de texto somente leitura exibindo resultado do scan: total de arquivos, tamanho, pastas incluídas e primeiros 20 arquivos identificados
-- Botão "Escanear agora" / "Escanear novamente"
-- O scan é executado em thread separada; a UI exibe contagem em tempo real a cada 50 arquivos
+- Cards com destino, estatísticas, usuários e exclusões
+- Layout adaptativo:
+  - < 1200px: 1 coluna
+  - 1200–2500px: 2 colunas
+  - > 2500px: 4 colunas (ultrawide)
+- Botão "Validar e gerar resumo" / "Atualizar resumo"
+- O scan é executado em thread separada
 
-### Aba 4 — Progresso (Backup)
+### Aba 5 — Backup
 
-- Label com o caminho do arquivo sendo copiado no momento
+- Grid de status com usuário atual, arquivo atual e tempo decorrido
 - Barra de progresso proporcional ao total de arquivos
 - Contador `N / Total`
-- Log em tempo real com rolagem automática
-- Botões "Iniciar backup" e "Parar"
+- Log em tempo real com rolagem automática (CTkTextbox expandido)
+- Botões "Iniciar Backup" e "Cancelar Backup"
 - Status final com contadores de copiados e erros
 
-### Aba 5 — Restaurar
+### Aba 6 — Restaurar
 
-- Campo de seleção da pasta de backup com informações do manifest carregado (total de arquivos, tamanho, data, máquina de origem)
-- Seleção de modo de restauração via radio buttons: "Restaurar tudo", "Restaurar seleção", "Restaurar para outro local"
-- Seleção de política de conflito via radio buttons: "Sobrescrever", "Perguntar", "Ignorar"
+- Campo de seleção da pasta de backup com informações do manifest carregado
+- Seleção de modo de restauração via radio buttons
+- Seleção de política de conflito via radio buttons
 - Campo de destino alternativo (visível somente no modo "Restaurar para outro local")
 - Lista de checkboxes com pastas raiz do manifest (visível somente no modo "Restaurar seleção")
 - Barra de progresso da restauração
-- Log em tempo real
-- Status final com contadores discriminados (restaurados, sobrescritos, ignorados, corrompidos, erros, tempo decorrido)
+- Log em tempo real (CTkTextbox expandido)
+- Status final com contadores discriminados
 
 ---
 
@@ -704,6 +747,7 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 | RAM | 256 MB disponíveis |
 | Disco (executável) | Aproximadamente 30–60 MB (estimativa PyInstaller) |
 | Python | 3.11+ (apenas para execução via fonte) |
+| Resolução | 1366x768 |
 
 ### Limitações identificadas
 
@@ -712,7 +756,6 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 - O modo `alternate` na restauração não reconstrói a estrutura de subdiretórios
 - A detecção de drives no Linux depende de `lsblk`; ambientes sem `util-linux` podem não detectar dispositivos automaticamente
 - Não há controle de espaço em disco disponível no destino antes de iniciar o backup
-- A interface gráfica não escala para resoluções abaixo de 860x620 pixels
 
 ### Boas práticas de utilização
 
@@ -739,6 +782,9 @@ Não há framework de testes automatizados presente no repositório. Os testes i
 | Conflito com política `ignore` | `skipped == 1` |
 | Detecção de arquivo corrompido | `corrupted == 1`, arquivo não restaurado |
 | Geração de relatório JSON e CSV | Arquivos criados com sucesso |
+| Responsividade em 1366x768 | Nenhum componente cortado |
+| Responsividade em 4K | Tudo legível, sem fontes pequenas |
+| Responsividade em ultrawide | Layout com até 4 colunas no resumo |
 
 ### Como executar validações manuais
 
@@ -827,6 +873,7 @@ pip install -r requirements.txt
 - Operações de I/O longas devem ser executadas em `threading.Thread(daemon=True)`
 - Comunicação thread → UI exclusivamente via `self.after(0, callback)`
 - Erros de arquivo devem ser capturados individualmente sem interromper o loop de processamento
+- Componentes de UI responsivos: usar `sticky="ew"` ou `sticky="nsew"`, evitar `width`/`height` fixos
 
 ### Checklist para novos módulos em `core/`
 
@@ -845,9 +892,9 @@ Recomenda-se adotar o padrão **Semantic Versioning (SemVer)** conforme `MAJOR.M
 |---|---|
 | `MAJOR` | Quebra de compatibilidade no formato do `manifest.json` ou mudança estrutural na interface |
 | `MINOR` | Adição de novo modo de restauração, novo destino suportado ou nova funcionalidade retrocompatível |
-| `PATCH` | Correção de bugs, ajuste de exclusões padrão, atualização de dependências |
+| `PATCH` | Correção de bugs, ajuste de exclusões padrão, atualização de dependências, melhorias de responsividade |
 
-Versão inicial sugerida: `1.0.0`
+Versão atual: `1.1.0`
 
 ---
 
@@ -867,6 +914,7 @@ Não identificado no código-fonte.
 
 | Versão | Data | Alterações |
 |---|---|---|
+| 1.1.0 | 2026-07 | Interface responsiva completa, DPI awareness moderna, sistema de fontes dinâmicas, layout ultrawide, 6 abas organizadas |
 | 1.0.0 | 2026-06 | Versão inicial: backup com manifest, restauração com verificação SHA-256, interface com 5 abas, empacotamento via PyInstaller |
 
 ---
