@@ -1,7 +1,8 @@
 import os
 import platform
 import subprocess
-from typing import List, Dict
+import shutil
+from typing import List, Dict, Tuple, Optional
 
 
 SYSTEM = platform.system()
@@ -62,6 +63,21 @@ def _get_windows_label(letter: str) -> str:
         return buf.value
     except Exception:
         return ""
+
+
+def check_disk_space(path: str, required_bytes: int) -> Tuple[bool, Optional[int], Optional[int]]:
+    """
+    Check if there's enough space on the disk.
+    Returns (has_space, free_bytes, total_bytes)
+    """
+    try:
+        usage = shutil.disk_usage(path)
+        free = usage.free
+        total = usage.total
+        has_space = free >= required_bytes
+        return has_space, free, total
+    except Exception:
+        return False, None, None
 
 
 def validate_destination(path: str) -> tuple[bool, str]:

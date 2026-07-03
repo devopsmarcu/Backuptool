@@ -3,10 +3,34 @@ import json
 import hashlib
 import platform
 import socket
+import tempfile
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass, asdict
+
+from core.compression import decompress_zip
+
+
+def prepare_backup_path(backup_path: str) -> tuple[str, Optional[str]]:
+    """
+    Prepare backup path: if it's a zip file, extract it and return the actual directory
+    and the temp directory to clean up later.
+    """
+    temp_dir = None
+    actual_dir = backup_path
+
+    if backup_path.endswith(".zip") and os.path.isfile(backup_path):
+        temp_dir = tempfile.mkdtemp()
+        decompress_zip(backup_path, temp_dir)
+        extracted_items = os.listdir(temp_dir)
+        if len(extracted_items) == 1 and os.path.isdir(os.path.join(temp_dir, extracted_items[0])):
+            actual_dir = os.path.join(temp_dir, extracted_items[0])
+        else:
+            actual_dir = temp_dir
+
+    return actual_dir, temp_dir
 
 
 @dataclass
@@ -28,6 +52,8 @@ class Manifest:
     files: List[ManifestEntry]
     user: str = ""
     original_profile: str = ""
+    backup_type: str = "full"  # "full" or "incremental"
+    previous_backup_dir: str = ""
 
 
 def sha256_file(path: str) -> Optional[str]:
@@ -76,6 +102,8 @@ def save_manifest(manifest: Manifest, backup_dir: str) -> str:
         "total_files": manifest.total_files,
         "total_size": manifest.total_size,
         "files": [asdict(e) for e in manifest.files],
+        "backup_type": manifest.backup_type,
+        "previous_backup_dir": manifest.previous_backup_dir,
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -83,28 +111,54 @@ def save_manifest(manifest: Manifest, backup_dir: str) -> str:
 
 
 def load_manifest(backup_dir: str) -> Manifest:
-    path = os.path.join(backup_dir, "manifest.json")
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"manifest.json não encontrado em: {backup_dir}")
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    entries = [ManifestEntry(**e) for e in data.get("files", [])]
-    return Manifest(
-        backup_date=data.get("backup_date", ""),
-        machine=data.get("machine", ""),
-        os=data.get("os", ""),
-        total_files=data.get("total_files", len(entries)),
-        total_size=data.get("total_size", 0),
-        files=entries,
-        user=data.get("user", ""),
-        original_profile=data.get("original_profile", ""),
-    )
+    actual_dir, temp_dir = prepare_backup_path(backup_dir)
+    try:
+        path = os.path.join(actual_dir, "manifest.json")
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"manifest.json não encontrado em: {backup_dir}")
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        entries = [ManifestEntry(**e) for e in data.get("files", [])]
+        manifest = Manifest(
+            backup_date=data.get("backup_date", ""),
+            machine=data.get("machine", ""),
+            os=data.get("os", ""),
+            total_files=data.get("total_files", len(entries)),
+            total_size=data.get("total_size", 0),
+            files=entries,
+            user=data.get("user", ""),
+            original_profile=data.get("original_profile", ""),
+            backup_type=data.get("backup_type", "full"),
+            previous_backup_dir=data.get("previous_backup_dir", ""),
+        )
+        return manifest
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def get_users_from_manifest(manifest: Manifest) -> List[str]:
+    """Extract unique usernames from manifest entries."""
+    users = set()
+    for entry in manifest.files:
+        path = Path(entry.source)
+        if platform.system() == "Windows":
+            # Windows: C:\Users\username\...
+            if len(path.parts) >= 3 and path.parts[1].lower() == "users":
+                users.add(path.parts[2])
+        else:
+            # Linux/macOS: /home/username/...
+            if len(path.parts) >= 3 and path.parts[1] == "home":
+                users.add(path.parts[2])
+    return sorted(list(users))
 
 
 def make_manifest(
     entries_with_sha: List[ManifestEntry],
     user: str = "",
     original_profile: str = "",
+    backup_type: str = "full",
+    previous_backup_dir: str = "",
 ) -> Manifest:
     return Manifest(
         backup_date=datetime.now().isoformat(),
@@ -115,4 +169,6 @@ def make_manifest(
         files=entries_with_sha,
         user=user,
         original_profile=original_profile,
+        backup_type=backup_type,
+        previous_backup_dir=previous_backup_dir,
     )

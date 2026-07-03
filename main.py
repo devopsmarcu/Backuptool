@@ -308,6 +308,20 @@ class BackupApp(ctk.CTk):
             text_color=TEXT_MUTED,
         ).grid(row=0, column=1, sticky="e", padx=16)
 
+    def _create_empty_state(self, parent, icon, title, description, cta_text=None, cta_command=None):
+        frame = ctk.CTkFrame(parent, fg_color=BG_INPUT, corner_radius=8)
+        frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(0, weight=1)
+        content = ctk.CTkFrame(frame, fg_color="transparent")
+        content.pack(expand=True)
+        ctk.CTkLabel(content, text=icon, font=get_font(48)).pack(pady=(0,8))
+        ctk.CTkLabel(content, text=title, font=get_section_font(), text_color=TEXT_MAIN).pack(pady=(0,4))
+        ctk.CTkLabel(content, text=description, font=get_small_font(), text_color=TEXT_MUTED, wraplength=500).pack(pady=(0,16))
+        if cta_text and cta_command:
+            ctk.CTkButton(content, text=cta_text, fg_color=ACCENT, hover_color=ACCENT_HOVER, command=cta_command).pack()
+        return frame
+
     def _screen_intro(self, parent, title, description, accent=ACCENT):
         ctk.CTkLabel(parent, text=title, font=FONT_SECTION,
                      text_color=TEXT_MAIN).grid(row=0, column=0, sticky="ew", padx=4, pady=(8, 2))
@@ -835,10 +849,20 @@ class BackupApp(ctk.CTk):
                                             justify="left", anchor="w")
         self.lbl_backup_time.grid(row=0, column=2, sticky="ew", padx=12, pady=10)
 
-        self.progressbar = ctk.CTkProgressBar(tab, height=16,
+        progress_row = ctk.CTkFrame(tab, fg_color="transparent")
+        progress_row.grid(row=3, column=0, sticky="ew", padx=4, pady=(2,4))
+        progress_row.grid_columnconfigure(0, weight=1)
+
+        self.progressbar = ctk.CTkProgressBar(progress_row, height=16,
                                                fg_color=BG_INPUT, progress_color=ACCENT)
-        self.progressbar.grid(row=3, column=0, sticky="ew", padx=4, pady=(2, 4))
+        self.progressbar.grid(row=0, column=0, sticky="ew")
         self.progressbar.set(0)
+
+        self.lbl_percentage = ctk.CTkLabel(progress_row, text="0%",
+                                           font=get_font(14, "bold"),
+                                           text_color=TEXT_MAIN,
+                                           width=60)
+        self.lbl_percentage.grid(row=0, column=1, padx=(8,0))
 
         self.lbl_counter = ctk.CTkLabel(tab, text="Progresso: 0 / 0 arquivos",
                                          font=FONT_SMALL, text_color=TEXT_MUTED)

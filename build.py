@@ -37,6 +37,9 @@ def main():
         # Adiciona ícone se existir
         if os.path.exists("assets/icon.ico"):
             cmd += ["--icon=assets/icon.ico"]
+        # Adiciona version info
+        if os.path.exists("assets/version_info.txt"):
+            cmd += ["--version-file=assets/version_info.txt"]
 
     subprocess.run(cmd, check=True)
     print(f"\n✔  Build concluído: dist/{NAME}{'exe' if SYSTEM == 'Windows' else ''}")

@@ -847,7 +847,6 @@ O executável deve ser regenerado após qualquer alteração no código-fonte ou
 | Média | Suporte a destino via SSH/SFTP |
 | Baixa | Adição de ícone e metadados de versão no executável Windows |
 | Baixa | Framework de testes automatizados (pytest) cobrindo os módulos `core/` |
-| Baixa | Modo de linha de comando (CLI) sem dependência de interface gráfica |
 | Baixa | Histórico de backups: exibição de execuções anteriores na aba de restauração |
 
 ---
