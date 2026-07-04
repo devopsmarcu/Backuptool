@@ -2,6 +2,7 @@
 main.py — BackupTool GUI (CustomTkinter)
 
 Abas:
+  1 · Usuários    — seleção de perfis para o backup
   2 · Origens      — paths e exclusões
   3 · Destino     — HD externo / pasta de rede
   4 · Resumo      — scan pré-backup
@@ -439,8 +440,9 @@ class BackupApp(ctk.CTk):
         return foot
 
     def _screen_intro(self, parent, title, description, accent=ACCENT):
+        title_color = accent if accent != ACCENT else TEXT_MAIN
         ctk.CTkLabel(parent, text=title, font=FONT_SECTION,
-                     text_color=TEXT_MAIN).grid(row=0, column=0, sticky="ew", padx=S_S, pady=(S_S, S_S))
+                     text_color=title_color).grid(row=0, column=0, sticky="ew", padx=S_S, pady=(S_S, S_S))
         ctk.CTkLabel(parent, text=description, font=FONT_SMALL,
                      text_color=TEXT_MUTED, wraplength=900, justify="left"
                      ).grid(row=1, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
@@ -469,25 +471,25 @@ class BackupApp(ctk.CTk):
             # Stack vertically (1 column)
             self.resumo_container.grid_columnconfigure((0,1,2,3), weight=0)
             self.resumo_container.grid_columnconfigure(0, weight=1)
-            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['stats'].grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['users'].grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['excl'].grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['stats'].grid(row=1, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['users'].grid(row=2, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['excl'].grid(row=3, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
         elif width < 2500:
             # Two columns (normal wide)
             self.resumo_container.grid_columnconfigure((0,1,2,3), weight=0)
             self.resumo_container.grid_columnconfigure((0,1), weight=1)
-            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['users'].grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['excl'].grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['users'].grid(row=1, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['excl'].grid(row=1, column=1, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
         else:
             # Four columns (ultrawide)
             self.resumo_container.grid_columnconfigure((0,1,2,3), weight=1)
-            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['users'].grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
-            self.resumo_cards['excl'].grid(row=0, column=3, sticky="nsew", padx=5, pady=5)
+            self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['users'].grid(row=0, column=2, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+            self.resumo_cards['excl'].grid(row=0, column=3, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
 
     def _format_duration(self, seconds):
         seconds = max(0, int(seconds))
@@ -583,7 +585,7 @@ class BackupApp(ctk.CTk):
     def _build_tab_origem(self):
         tab = self.tabview.tab("2 · Origens")
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(2, weight=1)
+        tab.grid_rowconfigure(3, weight=1)
 
         self._screen_intro(
             tab,
@@ -593,7 +595,7 @@ class BackupApp(ctk.CTk):
 
         # --- Paths Card ---
         paths_card = self.create_card(tab, title="Pastas de Origem")
-        paths_card.grid(row=1, column=0, sticky="nsew", padx=S_S, pady=S_S)
+        paths_card.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=S_S)
         paths_card.grid_columnconfigure(0, weight=1)
 
         self.paths_frame = ctk.CTkScrollableFrame(paths_card, fg_color="transparent", corner_radius=0)
@@ -606,7 +608,7 @@ class BackupApp(ctk.CTk):
 
         # --- Exclusions Card ---
         excl_card = self.create_card(tab, title="Exclusões Aplicadas")
-        excl_card.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
+        excl_card.grid(row=3, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
         excl_card.grid_columnconfigure(0, weight=1)
 
         excl_info = ctk.CTkLabel(excl_card, text="Pastas e extensões ignoradas durante o scan.",
@@ -645,13 +647,13 @@ class BackupApp(ctk.CTk):
         self._refresh_paths_list()
 
     # ══════════════════════════════════════════
-    #  Aba 2 — Usuários
+    #  Aba 1 — Usuários
     # ══════════════════════════════════════════
 
     def _build_tab_usuarios(self):
         tab = self.tabview.tab("1 · Usuários")
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_rowconfigure(3, weight=1)
 
         self._screen_intro(
             tab,
@@ -661,7 +663,7 @@ class BackupApp(ctk.CTk):
 
         # --- Top Bar (Search & Actions) ---
         top_bar = ctk.CTkFrame(tab, fg_color="transparent")
-        top_bar.grid(row=1, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
+        top_bar.grid(row=2, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
         top_bar.grid_columnconfigure(1, weight=1)
 
         search_frame = ctk.CTkFrame(top_bar, fg_color=BG_INPUT, corner_radius=S_S, height=H_WGT)
@@ -689,7 +691,7 @@ class BackupApp(ctk.CTk):
 
         # --- Table Area ---
         table_container = ctk.CTkFrame(tab, fg_color=BG_CARD, corner_radius=R_CRD)
-        table_container.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
+        table_container.grid(row=3, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
         table_container.grid_columnconfigure(0, weight=1)
         table_container.grid_rowconfigure(1, weight=1)
 
@@ -700,7 +702,7 @@ class BackupApp(ctk.CTk):
 
         # --- Bottom Actions ---
         bottom_bar = ctk.CTkFrame(tab, fg_color="transparent")
-        bottom_bar.grid(row=3, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
+        bottom_bar.grid(row=4, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
         bottom_bar.grid_columnconfigure(1, weight=1)
 
         self.btn_select_all = self.create_secondary_button(bottom_bar, text="Selecionar Todos", command=self._select_all_users)
@@ -789,7 +791,7 @@ class BackupApp(ctk.CTk):
     def _build_tab_destino(self):
         tab = self.tabview.tab("3 · Destino")
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(2, weight=1)
+        tab.grid_rowconfigure(3, weight=1)
 
         self._screen_intro(
             tab,
@@ -799,7 +801,7 @@ class BackupApp(ctk.CTk):
 
         # --- Detected Drives Card ---
         drives_card = self.create_card(tab, title="Dispositivos Detectados")
-        drives_card.grid(row=1, column=0, sticky="nsew", padx=S_S, pady=S_S)
+        drives_card.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=S_S)
         drives_card.grid_columnconfigure(0, weight=1)
 
         self.drives_frame = ctk.CTkScrollableFrame(drives_card, fg_color="transparent", corner_radius=0)
@@ -813,7 +815,7 @@ class BackupApp(ctk.CTk):
 
         # --- Manual Selection Card ---
         manual_card = self.create_card(tab, title="Seleção Manual")
-        manual_card.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
+        manual_card.grid(row=3, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
         manual_card.grid_columnconfigure(0, weight=1)
 
         input_frame = ctk.CTkFrame(manual_card, fg_color="transparent")
@@ -865,7 +867,7 @@ class BackupApp(ctk.CTk):
             self.dest_entry.insert(0, p)
 
     # ══════════════════════════════════════════
-    #  Aba 3 — Resumo
+    #  Aba 4 — Resumo
     # ══════════════════════════════════════════
 
     def _build_tab_resumo(self):
@@ -880,49 +882,44 @@ class BackupApp(ctk.CTk):
         )
 
         # Container para os cards
-        self.resumo_container = ctk.CTkScrollableFrame(tab, fg_color=BG_INPUT, corner_radius=8)
-        self.resumo_container.grid(row=2, column=0, sticky="nsew", padx=4, pady=(4, 8))
-        self.resumo_container.grid_columnconfigure((0, 1, 2, 3), weight=1)  # Prepare for ultrawide
+        self.resumo_container = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
+        self.resumo_container.grid(row=2, column=0, sticky="nsew", padx=S_S, pady=(S_S, S_S))
+        self.resumo_container.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         # Cards de informação
         self.resumo_cards = {}
 
         # Card: Destino
-        self.resumo_cards['dest'] = ctk.CTkFrame(self.resumo_container, fg_color=BG_PANEL, corner_radius=8)
-        self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.resumo_cards['dest'].grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.resumo_cards['dest'], text="Destino", font=FONT_SECTION, text_color=ACCENT).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 2))
-        self.lbl_resumo_dest = ctk.CTkLabel(self.resumo_cards['dest'], text="Aguardando scan...", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_resumo_dest.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.resumo_cards['dest'] = self.create_card(self.resumo_container, title="Destino")
+        self.resumo_cards['dest'].grid(row=0, column=0, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+        self.lbl_resumo_dest = ctk.CTkLabel(self.resumo_cards['dest'], text="Aguardando scan...",
+                                           font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_resumo_dest.pack(fill="x", padx=S_S, pady=(0, S_S))
 
         # Card: Arquivos e Tamanho
-        self.resumo_cards['stats'] = ctk.CTkFrame(self.resumo_container, fg_color=BG_PANEL, corner_radius=8)
-        self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-        self.resumo_cards['stats'].grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.resumo_cards['stats'], text="Estatísticas", font=FONT_SECTION, text_color=ACCENT).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 2))
-        self.lbl_resumo_stats = ctk.CTkLabel(self.resumo_cards['stats'], text="Aguardando scan...", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_resumo_stats.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.resumo_cards['stats'] = self.create_card(self.resumo_container, title="Estatísticas")
+        self.resumo_cards['stats'].grid(row=0, column=1, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+        self.lbl_resumo_stats = ctk.CTkLabel(self.resumo_cards['stats'], text="Aguardando scan...",
+                                             font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_resumo_stats.pack(fill="x", padx=S_S, pady=(0, S_S))
 
         # Card: Usuários
-        self.resumo_cards['users'] = ctk.CTkFrame(self.resumo_container, fg_color=BG_PANEL, corner_radius=8)
-        self.resumo_cards['users'].grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
-        self.resumo_cards['users'].grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.resumo_cards['users'], text="Usuários", font=FONT_SECTION, text_color=ACCENT).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 2))
-        self.lbl_resumo_users = ctk.CTkLabel(self.resumo_cards['users'], text="Aguardando scan...", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_resumo_users.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.resumo_cards['users'] = self.create_card(self.resumo_container, title="Usuários")
+        self.resumo_cards['users'].grid(row=0, column=2, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+        self.lbl_resumo_users = ctk.CTkLabel(self.resumo_cards['users'], text="Aguardando scan...",
+                                             font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_resumo_users.pack(fill="x", padx=S_S, pady=(0, S_S))
 
         # Card: Exclusões
-        self.resumo_cards['excl'] = ctk.CTkFrame(self.resumo_container, fg_color=BG_PANEL, corner_radius=8)
-        self.resumo_cards['excl'].grid(row=0, column=3, sticky="nsew", padx=5, pady=5)
-        self.resumo_cards['excl'].grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.resumo_cards['excl'], text="Exclusões", font=FONT_SECTION, text_color=ACCENT).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 2))
-        self.lbl_resumo_excl = ctk.CTkLabel(self.resumo_cards['excl'], text="Aguardando scan...", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_resumo_excl.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.resumo_cards['excl'] = self.create_card(self.resumo_container, title="Exclusões")
+        self.resumo_cards['excl'].grid(row=0, column=3, sticky="nsew", padx=S_S // 2, pady=S_S // 2)
+        self.lbl_resumo_excl = ctk.CTkLabel(self.resumo_cards['excl'], text="Aguardando scan...",
+                                             font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_resumo_excl.pack(fill="x", padx=S_S, pady=(0, S_S))
 
-        self.btn_scan = ctk.CTkButton(tab, text="Validar e gerar resumo",
-                                       fg_color=ACCENT, hover_color=ACCENT_HOVER,
-                                       command=self._start_scan)
-        self.btn_scan.grid(row=3, column=0, pady=(0, 4))
+        # Action button at the bottom
+        self.btn_scan = self.create_primary_button(tab, text="Validar e gerar resumo", command=self._start_scan)
+        self.btn_scan.grid(row=3, column=0, pady=S_S)
 
         # Bind resize event to the window
         self.bind("<Configure>", self._on_window_resize)
@@ -1002,86 +999,80 @@ class BackupApp(ctk.CTk):
         self.lbl_resumo_excl.configure(text=data.get('excl', ''))
 
     # ══════════════════════════════════════════
-    #  Aba 4 — Progresso (Backup)
+    #  Aba 5 — Backup
     # ══════════════════════════════════════════
 
     def _build_tab_progresso(self):
         tab = self.tabview.tab("5 · Backup")
         tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(5, weight=1)
+
         self._screen_intro(
             tab,
             "Execução do backup",
             "Acompanhe usuário atual, arquivo processado, progresso e tempo estimado restante."
         )
 
-        status_grid = ctk.CTkFrame(tab, fg_color=BG_PANEL, corner_radius=8)
-        status_grid.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 8))
-        status_grid.grid_columnconfigure((0, 1, 2), weight=1)
+        # --- Status Card ---
+        status_card = self.create_card(tab, title="Monitoramento de Cópia")
+        status_card.grid(row=2, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
+        status_card.grid_columnconfigure((0, 1, 2), weight=1)
 
-        self.lbl_backup_user = ctk.CTkLabel(status_grid, text="Usuário atual\nAguardando início",
+        self.lbl_backup_user = ctk.CTkLabel(status_card, text="Usuário atual\nAguardando início",
                                             font=FONT_SMALL, text_color=TEXT_MAIN,
                                             justify="left", anchor="w")
-        self.lbl_backup_user.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
-        self.lbl_current = ctk.CTkLabel(status_grid, text="Arquivo atual\nAguardando início",
+        self.lbl_backup_user.grid(row=0, column=0, sticky="ew", padx=S_S, pady=S_S)
+
+        self.lbl_current = ctk.CTkLabel(status_card, text="Arquivo atual\nAguardando início",
                                         font=FONT_SMALL, text_color=TEXT_MAIN,
                                         justify="left", anchor="w")
-        self.lbl_current.grid(row=0, column=1, sticky="ew", padx=12, pady=10)
-        self.lbl_backup_time = ctk.CTkLabel(status_grid, text="Tempo\n0s · restante calculando...",
+        self.lbl_current.grid(row=0, column=1, sticky="ew", padx=S_S, pady=S_S)
+
+        self.lbl_backup_time = ctk.CTkLabel(status_card, text="Tempo\n0s · restante calculando...",
                                             font=FONT_SMALL, text_color=TEXT_MAIN,
                                             justify="left", anchor="w")
-        self.lbl_backup_time.grid(row=0, column=2, sticky="ew", padx=12, pady=10)
+        self.lbl_backup_time.grid(row=0, column=2, sticky="ew", padx=S_S, pady=S_S)
 
-        progress_row = ctk.CTkFrame(tab, fg_color="transparent")
-        progress_row.grid(row=3, column=0, sticky="ew", padx=4, pady=(2,4))
-        progress_row.grid_columnconfigure(0, weight=1)
+        # --- Progress Section ---
+        progress_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        progress_frame.grid(row=3, column=0, sticky="ew", padx=S_S, pady=(S_S, S_S))
+        progress_frame.grid_columnconfigure(0, weight=1)
 
-        self.progressbar = ctk.CTkProgressBar(progress_row, height=16,
+        self.progressbar = ctk.CTkProgressBar(progress_frame, height=16,
                                                fg_color=BG_INPUT, progress_color=ACCENT)
         self.progressbar.grid(row=0, column=0, sticky="ew")
         self.progressbar.set(0)
 
-        self.lbl_percentage = ctk.CTkLabel(progress_row, text="0%",
+        self.lbl_percentage = ctk.CTkLabel(progress_frame, text="0%",
                                            font=get_font(14, "bold"),
                                            text_color=TEXT_MAIN,
                                            width=60)
-        self.lbl_percentage.grid(row=0, column=1, padx=(8,0))
+        self.lbl_percentage.grid(row=0, column=1, padx=(S_S, 0))
 
         self.lbl_counter = ctk.CTkLabel(tab, text="Progresso: 0 / 0 arquivos",
                                          font=FONT_SMALL, text_color=TEXT_MUTED)
-        self.lbl_counter.grid(row=4, column=0, sticky="e", padx=4)
+        self.lbl_counter.grid(row=4, column=0, sticky="e", padx=S_S)
 
+        # --- Logs Area ---
         self.log_box = ctk.CTkTextbox(tab, font=FONT_MONO,
                                        fg_color=BG_INPUT, text_color=TEXT_MAIN,
+                                       border_color=BG_PANEL, border_width=1,
                                        state="disabled")
-        self.log_box.grid(row=5, column=0, sticky="nsew", padx=4, pady=(4, 8))
-        tab.grid_rowconfigure(5, weight=1)
+        self.log_box.grid(row=5, column=0, sticky="nsew", padx=S_S, pady=(S_S, S_S))
 
+        # --- Action Row ---
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
-        btn_row.grid(row=6, column=0, sticky="ew", padx=4, pady=(0, 4))
+        btn_row.grid(row=6, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
         btn_row.grid_columnconfigure(4, weight=1)
 
-        self.btn_start = ctk.CTkButton(btn_row, text="Iniciar Backup",
-                                        fg_color=SUCCESS, hover_color="#16A34A",
-                                        command=self._start_backup)
+        self.btn_start = self.create_primary_button(btn_row, text="Iniciar Backup", command=self._start_backup, fg_color=SUCCESS, hover_color="#16A34A")
         self.btn_start.grid(row=0, column=0, sticky="w")
 
-        self.btn_stop = ctk.CTkButton(btn_row, text="Cancelar Backup",
-                                       fg_color=ERROR_CLR, hover_color="#B91C1C",
-                                       command=self._stop_backup,
-                                       state="disabled")
-        self.btn_stop.grid(row=0, column=1, sticky="w", padx=8)
+        self.btn_stop = self.create_secondary_button(btn_row, text="Cancelar Backup", command=self._stop_backup, fg_color=ERROR_CLR, hover_color="#B91C1C", text_color="white", state="disabled")
+        self.btn_stop.grid(row=0, column=1, sticky="w", padx=S_S)
 
-        ctk.CTkButton(btn_row, text="Abrir Relatório",
-                      fg_color=BG_INPUT, hover_color=BG_PANEL,
-                      text_color=TEXT_MUTED,
-                      command=lambda: self._open_path(self.last_report_path)
-                      ).grid(row=0, column=2, sticky="w", padx=(0, 8))
-
-        ctk.CTkButton(btn_row, text="Abrir Pasta",
-                      fg_color=BG_INPUT, hover_color=BG_PANEL,
-                      text_color=TEXT_MUTED,
-                      command=lambda: self._open_path(self.last_backup_dir)
-                      ).grid(row=0, column=3, sticky="w")
+        self.create_secondary_button(btn_row, text="Abrir Relatório", command=lambda: self._open_path(self.last_report_path)).grid(row=0, column=2, sticky="w", padx=(S_S, 0))
+        self.create_secondary_button(btn_row, text="Abrir Pasta", command=lambda: self._open_path(self.last_backup_dir)).grid(row=0, column=3, sticky="w", padx=S_S)
 
         self.lbl_status_final = ctk.CTkLabel(btn_row, text="",
                                               font=get_font(12, "bold"),
@@ -1239,7 +1230,7 @@ class BackupApp(ctk.CTk):
         self.log_box.configure(state="disabled")
 
     # ══════════════════════════════════════════
-    #  Aba 5 — Restaurar
+    #  Aba 6 — Restaurar
     # ══════════════════════════════════════════
 
     def _build_tab_restaurar(self):
@@ -1253,39 +1244,47 @@ class BackupApp(ctk.CTk):
             accent=RESTORE_CL,
         )
 
-        row_src = ctk.CTkFrame(tab, fg_color="transparent")
-        row_src.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
+        # --- Source Selection Card ---
+        src_card = self.create_card(tab, title="Origem do Backup")
+        src_card.grid(row=2, column=0, sticky="ew", padx=S_S, pady=S_S)
+        src_card.grid_columnconfigure(0, weight=1)
+
+        row_src = ctk.CTkFrame(src_card, fg_color="transparent")
+        row_src.pack(fill="x", padx=S_S, pady=S_S)
         row_src.grid_columnconfigure(0, weight=1)
+
         self.restore_src_entry = ctk.CTkEntry(
             row_src, placeholder_text="Pasta do backup",
-            fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_INPUT)
+            fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_PANEL,
+            height=H_WGT
+        )
         self.restore_src_entry.grid(row=0, column=0, sticky="ew")
-        ctk.CTkButton(row_src, text="Procurar",
-                      fg_color=RESTORE_CL, hover_color="#0F766E",
-                      command=self._browse_restore_src
-                      ).grid(row=0, column=1, sticky="e", padx=(8, 0))
 
-        self.lbl_manifest_info = ctk.CTkLabel(tab, text="",
-                                               font=FONT_SMALL, text_color=TEXT_MUTED)
-        self.lbl_manifest_info.grid(row=3, column=0, sticky="w", padx=4, pady=(2, 8))
+        self.create_primary_button(row_src, text="Procurar", command=self._browse_restore_src, fg_color=RESTORE_CL, hover_color="#0F766E").grid(row=0, column=1, padx=(S_S, 0))
 
-        ctk.CTkLabel(tab, text="Validação e mapeamento automático",
-                     font=FONT_SECTION, text_color=TEXT_MAIN
-                     ).grid(row=4, column=0, sticky="w", padx=4, pady=(0, 4))
-        self.corporate_preview_frame = ctk.CTkScrollableFrame(
-            tab, fg_color=BG_INPUT, corner_radius=8)
-        self.corporate_preview_frame.grid(row=5, column=0, sticky="nsew", padx=4, pady=(0, 8))
-        tab.grid_rowconfigure(5, weight=1)
+        self.lbl_manifest_info = ctk.CTkLabel(src_card, text="", font=FONT_SMALL, text_color=TEXT_MUTED)
+        self.lbl_manifest_info.pack(anchor="w", padx=S_S, pady=(0, S_S))
 
-        panels = ctk.CTkFrame(tab, fg_color="transparent")
-        panels.grid(row=6, column=0, sticky="ew", padx=4, pady=(0, 8))
-        panels.grid_columnconfigure((0, 1), weight=1)
+        # --- Validation Card ---
+        val_card = self.create_card(tab, title="Validação e Mapeamento")
+        val_card.grid(row=3, column=0, sticky="nsew", padx=S_S, pady=(0, S_S))
+        val_card.grid_columnconfigure(0, weight=1)
 
-        pane_mode = ctk.CTkFrame(panels, fg_color=BG_INPUT, corner_radius=8)
-        pane_mode.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        ctk.CTkLabel(pane_mode, text="Modo de restauração",
-                     font=get_font(11, "bold"), text_color=TEXT_MAIN
-                     ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
+        self.corporate_preview_frame = ctk.CTkScrollableFrame(val_card, fg_color="transparent", corner_radius=0)
+        self.corporate_preview_frame.pack(fill="both", expand=True, padx=S_S, pady=S_S)
+
+        # --- Configuration Card ---
+        conf_card = self.create_card(tab, title="Configurações de Restauro")
+        conf_card.grid(row=4, column=0, sticky="ew", padx=S_S, pady=S_S)
+
+        conf_content = ctk.CTkFrame(conf_card, fg_color="transparent")
+        conf_content.pack(fill="both", expand=True, padx=S_S, pady=S_S)
+        conf_content.grid_columnconfigure((0, 1), weight=1)
+
+        # Mode Pane
+        pane_mode = ctk.CTkFrame(conf_content, fg_color=BG_PANEL, corner_radius=R_STD)
+        pane_mode.grid(row=0, column=0, sticky="nsew", padx=S_S, pady=S_S)
+        ctk.CTkLabel(pane_mode, text="Modo de restauração", font=get_font(11, "bold"), text_color=TEXT_MAIN).grid(row=0, column=0, sticky="w", padx=S_S, pady=(S_S, S_S))
 
         self.restore_mode = ctk.StringVar(value="all")
         for i, (val, label) in enumerate([
@@ -1297,13 +1296,12 @@ class BackupApp(ctk.CTk):
                                value=val, text_color=TEXT_MAIN,
                                fg_color=RESTORE_CL, hover_color="#0F766E",
                                command=self._on_restore_mode_change
-                               ).grid(row=i+1, column=0, sticky="w", padx=12, pady=2)
+                               ).grid(row=i+1, column=0, sticky="w", padx=S_S * 2, pady=2)
 
-        pane_conf = ctk.CTkFrame(panels, fg_color=BG_INPUT, corner_radius=8)
-        pane_conf.grid(row=0, column=1, sticky="nsew")
-        ctk.CTkLabel(pane_conf, text="Conflitos",
-                     font=get_font(11, "bold"), text_color=TEXT_MAIN
-                     ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
+        # Conflict Pane
+        pane_conf = ctk.CTkFrame(conf_content, fg_color=BG_PANEL, corner_radius=R_STD)
+        pane_conf.grid(row=0, column=1, sticky="nsew", padx=S_S, pady=S_S)
+        ctk.CTkLabel(pane_conf, text="Políticas de Conflito", font=get_font(11, "bold"), text_color=TEXT_MAIN).grid(row=0, column=0, sticky="w", padx=S_S, pady=(S_S, S_S))
 
         self.conflict_mode = ctk.StringVar(value="overwrite")
         for i, (val, label) in enumerate([
@@ -1314,99 +1312,80 @@ class BackupApp(ctk.CTk):
             ctk.CTkRadioButton(pane_conf, text=label, variable=self.conflict_mode,
                                value=val, text_color=TEXT_MAIN,
                                fg_color=RESTORE_CL, hover_color="#0F766E",
-                               ).grid(row=i+1, column=0, sticky="w", padx=12, pady=2)
+                               ).grid(row=i+1, column=0, sticky="w", padx=S_S * 2, pady=2)
 
+        # --- Dynamic Selection Frames (Hidden by default) ---
+        # NOTE: these are children of `tab`, which is a grid-managed container.
+        # They must therefore use grid() (not pack()) to show/hide themselves,
+        # otherwise Tkinter raises "cannot use geometry manager pack inside
+        # ... which already has slaves managed by grid".
         self.frame_alt_dest = ctk.CTkFrame(tab, fg_color="transparent")
-        ctk.CTkLabel(self.frame_alt_dest, text="Pasta de destino alternativa",
-                     font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(anchor="w", pady=(0, 2))
+        self.frame_alt_dest.grid(row=5, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
+        ctk.CTkLabel(self.frame_alt_dest, text="Pasta de destino alternativa", font=FONT_SMALL, text_color=TEXT_MUTED).pack(anchor="w", pady=(S_S, 2))
         row_alt = ctk.CTkFrame(self.frame_alt_dest, fg_color="transparent")
         row_alt.pack(fill="x")
         self.restore_alt_entry = ctk.CTkEntry(
             row_alt, placeholder_text="Ex: D:\\Recuperacao  ou  /mnt/recuperacao",
-            fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_INPUT)
+            fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_PANEL, height=H_WGT)
         self.restore_alt_entry.pack(side="left", fill="x", expand=True)
-        ctk.CTkButton(row_alt, text="Procurar",
-                      fg_color=RESTORE_CL, hover_color="#0F766E",
-                      command=self._browse_alt_dest
-                      ).pack(side="right", padx=(8, 0))
+        self.create_primary_button(row_alt, text="Procurar", command=self._browse_alt_dest, fg_color=RESTORE_CL, hover_color="#0F766E").pack(side="right", padx=(S_S, 0))
+        self.frame_alt_dest.grid_remove()
 
         self.frame_selection = ctk.CTkFrame(tab, fg_color="transparent")
-        ctk.CTkLabel(self.frame_selection, text="Selecione quais pastas restaurar",
-                     font=FONT_SMALL, text_color=TEXT_MUTED
-                     ).pack(anchor="w", pady=(0, 2))
-        self.selection_frame = ctk.CTkScrollableFrame(
-            self.frame_selection, fg_color=BG_INPUT, corner_radius=8)
+        self.frame_selection.grid(row=5, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
+        ctk.CTkLabel(self.frame_selection, text="Selecione quais pastas restaurar", font=FONT_SMALL, text_color=TEXT_MUTED).pack(anchor="w", pady=(S_S, 2))
+        self.selection_frame = ctk.CTkScrollableFrame(self.frame_selection, fg_color=BG_INPUT, corner_radius=R_STD)
         self.selection_frame.pack(fill="x")
         self._selection_vars: dict[str, ctk.BooleanVar] = {}
+        self.frame_selection.grid_remove()
 
-        restore_status = ctk.CTkFrame(tab, fg_color=BG_PANEL, corner_radius=8)
-        restore_status.grid(row=7, column=0, sticky="ew", padx=4, pady=(4, 8))
+        # --- Progress & Logs ---
+        restore_status = self.create_card(tab, title="Status da Restauração")
+        restore_status.grid(row=6, column=0, sticky="ew", padx=S_S, pady=S_S)
         restore_status.grid_columnconfigure((0, 1, 2), weight=1)
-        self.lbl_restore_user = ctk.CTkLabel(
-            restore_status, text="Usuário atual\nAguardando início",
-            font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_restore_user.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
-        self.lbl_restore_current = ctk.CTkLabel(
-            restore_status, text="Arquivo atual\nAguardando início",
-            font=FONT_SMALL, text_color=TEXT_MAIN,
-            anchor="w", justify="left")
-        self.lbl_restore_current.grid(row=0, column=1, sticky="ew", padx=12, pady=10)
-        self.lbl_restore_time = ctk.CTkLabel(
-            restore_status, text="Tempo\n0s · restante calculando...",
-            font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
-        self.lbl_restore_time.grid(row=0, column=2, sticky="ew", padx=12, pady=10)
 
-        self.restore_progressbar = ctk.CTkProgressBar(
-            tab, height=14, fg_color=BG_INPUT, progress_color=RESTORE_CL)
-        self.restore_progressbar.grid(row=8, column=0, sticky="ew", padx=4, pady=(0, 2))
+        self.lbl_restore_user = ctk.CTkLabel(restore_status, text="Usuário atual\nAguardando início", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_restore_user.grid(row=0, column=0, sticky="ew", padx=S_S, pady=S_S)
+        self.lbl_restore_current = ctk.CTkLabel(restore_status, text="Arquivo atual\nAguardando início", font=FONT_SMALL, text_color=TEXT_MAIN, anchor="w", justify="left")
+        self.lbl_restore_current.grid(row=0, column=1, sticky="ew", padx=S_S, pady=S_S)
+        self.lbl_restore_time = ctk.CTkLabel(restore_status, text="Tempo\n0s · restante calculando...", font=FONT_SMALL, text_color=TEXT_MAIN, justify="left", anchor="w")
+        self.lbl_restore_time.grid(row=0, column=2, sticky="ew", padx=S_S, pady=S_S)
 
-        self.lbl_restore_counter = ctk.CTkLabel(
-            tab, text="Progresso: 0 / 0 arquivos", font=FONT_SMALL, text_color=TEXT_MUTED)
-        self.lbl_restore_counter.grid(row=9, column=0, sticky="e", padx=4)
+        self.restore_progressbar = ctk.CTkProgressBar(tab, height=14, fg_color=BG_INPUT, progress_color=RESTORE_CL)
+        self.restore_progressbar.grid(row=7, column=0, sticky="ew", padx=S_S, pady=(S_S, S_S))
 
-        self.restore_log = ctk.CTkTextbox(
-            tab, font=FONT_MONO, fg_color=BG_INPUT, text_color=TEXT_MAIN,
-            state="disabled")
-        self.restore_log.grid(row=10, column=0, sticky="nsew", padx=4, pady=(4, 4))
-        tab.grid_rowconfigure(10, weight=1)
+        self.lbl_restore_counter = ctk.CTkLabel(tab, text="Progresso: 0 / 0 arquivos", font=FONT_SMALL, text_color=TEXT_MUTED)
+        self.lbl_restore_counter.grid(row=8, column=0, sticky="e", padx=S_S)
+
+        self.restore_log = ctk.CTkTextbox(tab, font=FONT_MONO, fg_color=BG_INPUT, text_color=TEXT_MAIN, border_color=BG_PANEL, border_width=1, state="disabled")
+        self.restore_log.grid(row=9, column=0, sticky="nsew", padx=S_S, pady=(S_S, S_S))
+        tab.grid_rowconfigure(9, weight=1)
 
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
-        btn_row.grid(row=11, column=0, sticky="ew", padx=4, pady=(0, 4))
+        btn_row.grid(row=10, column=0, sticky="ew", padx=S_S, pady=(0, S_S))
         btn_row.grid_columnconfigure(3, weight=1)
 
-        self.btn_restore_start = ctk.CTkButton(
-            btn_row, text="Iniciar Restauração",
-            fg_color=RESTORE_CL, hover_color="#0F766E",
-            command=self._start_restore)
+        self.btn_restore_start = self.create_primary_button(btn_row, text="Iniciar Restauração", command=self._start_restore, fg_color=RESTORE_CL, hover_color="#0F766E")
         self.btn_restore_start.grid(row=0, column=0, sticky="w")
 
-        self.btn_restore_stop = ctk.CTkButton(
-            btn_row, text="Cancelar Restauração",
-            fg_color=ERROR_CLR, hover_color="#B91C1C",
-            command=self._stop_restore, state="disabled")
-        self.btn_restore_stop.grid(row=0, column=1, sticky="w", padx=8)
+        self.btn_restore_stop = self.create_secondary_button(btn_row, text="Cancelar Restauração", command=self._stop_restore, fg_color=ERROR_CLR, hover_color="#B91C1C", text_color="white", state="disabled")
+        self.btn_restore_stop.grid(row=0, column=1, sticky="w", padx=S_S)
 
-        ctk.CTkButton(btn_row, text="Abrir Relatório",
-                      fg_color=BG_INPUT, hover_color=BG_PANEL,
-                      text_color=TEXT_MUTED,
-                      command=lambda: self._open_path(self.last_restore_report_path)
-                      ).grid(row=0, column=2, sticky="w", padx=(0, 8))
+        self.create_secondary_button(btn_row, text="Abrir Relatório", command=lambda: self._open_path(self.last_restore_report_path)).grid(row=0, column=2, sticky="w", padx=(S_S, 0))
 
-        self.lbl_restore_status = ctk.CTkLabel(
-            btn_row, text="", font=get_font(12, "bold"), text_color=TEXT_MUTED)
+        self.lbl_restore_status = ctk.CTkLabel(btn_row, text="", font=get_font(12, "bold"), text_color=TEXT_MUTED)
         self.lbl_restore_status.grid(row=0, column=3, sticky="e")
 
     # ── Restaurar: event handlers ──────────────────────────────────────────────
 
     def _on_restore_mode_change(self):
         mode = self.restore_mode.get()
-        self.frame_alt_dest.pack_forget()
-        self.frame_selection.pack_forget()
+        self.frame_alt_dest.grid_remove()
+        self.frame_selection.grid_remove()
         if mode == "alternate":
-            self.frame_alt_dest.pack(fill="x", padx=4, pady=(0, 6))
+            self.frame_alt_dest.grid()
         elif mode == "selection":
-            self.frame_selection.pack(fill="x", padx=4, pady=(0, 6))
+            self.frame_selection.grid()
 
     def _browse_restore_src(self):
         p = filedialog.askdirectory(title="Selecionar pasta do backup")
@@ -1487,7 +1466,7 @@ class BackupApp(ctk.CTk):
             self._selection_vars[root] = var
             ctk.CTkCheckBox(self.selection_frame, text=root,
                             variable=var, text_color=TEXT_MAIN,
-                            fg_color=RESTORE_CL, hover_color="#7C3AED"
+                            fg_color=RESTORE_CL, hover_color="#0F766E"
                             ).pack(anchor="w", pady=1)
 
     def _browse_alt_dest(self):
