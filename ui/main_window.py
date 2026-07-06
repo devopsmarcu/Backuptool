@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
 )
 
-from styles.icons import app_icon
+from styles.icons import app_icon, icon_back, icon_forward, icon_refresh
 from ui.state import AppState
 from ui.toolbar import HeaderBar
 from ui.navigation import Stepper
@@ -173,11 +173,16 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout(foot)
         row.setContentsMargins(20, 10, 20, 10)
 
-        self.btn_back = SecondaryButton("← Voltar")
+        self.btn_back = SecondaryButton("Voltar")
+        self.btn_back.setIcon(icon_back(self))
         self.btn_back.clicked.connect(self._go_back)
+
         self.btn_restart = SecondaryButton("Reiniciar Processo")
+        self.btn_restart.setIcon(icon_refresh(self))
         self.btn_restart.clicked.connect(self._restart_process)
-        self.btn_next = PrimaryButton("Próximo →")
+
+        self.btn_next = PrimaryButton("Próximo")
+        self.btn_next.setIcon(icon_forward(self))
         self.btn_next.clicked.connect(self._go_next)
 
         row.addWidget(self.btn_back)

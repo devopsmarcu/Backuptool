@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QMessag
 
 from core.destinations import validate_destination
 from ui.state import AppState
-from ui.widgets import Card, SectionIntro, PrimaryButton
+from ui.widgets import SummaryStatCard, SectionIntro, PrimaryButton
 from ui.workers import ScanWorker
 
 WAITING_TEXT = "Aguardando scan..."
@@ -43,20 +43,28 @@ class SummaryPage(QWidget):
         self.grid.setSpacing(12)
         root.addWidget(self.grid_container, 1)
 
-        self.cards: dict[str, Card] = {}
+        self.cards: dict[str, SummaryStatCard] = {}
         self.labels: dict[str, QLabel] = {}
-        for key, title in (
-            ("dest", "Destino"), ("stats", "Estatísticas"),
-            ("users", "Usuários"), ("excl", "Exclusões"),
-        ):
-            card = Card(title)
-            lbl = QLabel(WAITING_TEXT)
-            lbl.setWordWrap(True)
-            lbl.setObjectName("Muted")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-            card.body_layout().addWidget(lbl)
+
+        # Mapeamento de Ícones para cada card de resumo
+        card_configs = [
+            ("dest", "Destino", "📂"),
+            ("stats", "Estatísticas", "📊"),
+            ("users", "Usuários", "👤"),
+            ("excl", "Exclusões", "🚫"),
+        ]
+
+        for key, title, icon in card_configs:
+            card = SummaryStatCard(icon, title)
+            # A SummaryStatCard já cria o label interno, vamos capturá-lo para atualizar o texto
+            # Como o label está no layout, precisamos de uma forma de acessá-lo.
+            # Vamos adicionar um método `set_value` ao SummaryStatCard (já fizemos no Write anterior).
             self.cards[key] = card
-            self.labels[key] = lbl
+            # Para manter compatibilidade com o código de atualização,
+            # vamos simular a existência de `self.labels` ou atualizar a lógica de update.
+            # No código original, self.labels[key] era usado.
+            # Vamos criar um mock ou mudar a função de update.
+            self.labels[key] = None # Placeholder, usaremos card.set_value()
 
         self._arrange_grid(4)
 
@@ -94,7 +102,7 @@ class SummaryPage(QWidget):
 
         self.btn_scan.setEnabled(False)
         self.btn_scan.setText("Escaneando...")
-        self.labels["stats"].setText(
+        self.cards["stats"].set_value(
             "Preparando resumo. A varredura pode levar alguns minutos em perfis grandes."
         )
 
@@ -108,17 +116,17 @@ class SummaryPage(QWidget):
         self._worker.start()
 
     def _on_files_found(self, count: int):
-        self.labels["stats"].setText(
+        self.cards["stats"].set_value(
             f"Varredura em andamento\n\nArquivos encontrados: {count}\nA interface continua ativa."
         )
 
     def _on_scan_finished(self, data: dict):
         self.state.scanned = data["scanned"]
         self.state.scanned_by_user = data["scanned_by_user"]
-        self.labels["dest"].setText(data["dest_text"])
-        self.labels["stats"].setText(data["stats_text"])
-        self.labels["users"].setText(data["users_text"])
-        self.labels["excl"].setText(data["excl_text"])
+        self.cards["dest"].set_value(data["dest_text"])
+        self.cards["stats"].set_value(data["stats_text"])
+        self.cards["users"].set_value(data["users_text"])
+        self.cards["excl"].set_value(data["excl_text"])
         self.btn_scan.setEnabled(True)
         self.btn_scan.setText("Atualizar resumo")
         self.scan_completed.emit()

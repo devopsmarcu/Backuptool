@@ -207,3 +207,33 @@ class MetricTile(QFrame):
 
     def set_value(self, value: str):
         self._value.setText(value)
+
+
+class SummaryStatCard(QFrame):
+    """Card de estatística para a tela de resumo (Ícone + Título + Valor)."""
+    def __init__(self, icon: str, title: str, value: str = "Aguardando scan...", parent=None):
+        super().__init__(parent)
+        self.setObjectName("Card")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 20, 16, 20)
+        layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_lbl.setStyleSheet("font-size: 28px;")
+        layout.addWidget(icon_lbl, 0, Qt.AlignmentFlag.AlignCenter)
+
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("CardTitle")
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_lbl, 0, Qt.AlignmentFlag.AlignCenter)
+
+        self._value_lbl = QLabel(value)
+        self._value_lbl.setObjectName("Muted")
+        self._value_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._value_lbl.setWordWrap(True)
+        layout.addWidget(self._value_lbl, 0, Qt.AlignmentFlag.AlignCenter)
+
+    def set_value(self, value: str):
+        self._value_lbl.setText(value)

@@ -19,6 +19,7 @@ BG_CARD_ALT   = "#232B3A"   # Linhas alternadas de tabela
 BG_INPUT      = "#1A2130"   # Campos de entrada
 BG_HOVER      = "#2D3950"   # Hover genérico
 BG_PANEL      = "#2A3346"   # Painéis internos (dentro de cards)
+BG_ELEVATED   = "#2B2B36"   # Nível de elevação para GroupBox / Panels
 
 BORDER        = "#3A4557"
 BORDER_LIGHT  = "#465066"
@@ -79,6 +80,21 @@ QFrame#Card {
     background-color: $bg_card;
     border: 1px solid $border;
     border-radius: $radius_md px;
+}
+
+QGroupBox {
+    background-color: $bg_elevated;
+    border: 1px solid $border;
+    border-radius: $radius_sm px;
+    margin-top: 1.2em;
+    font-weight: 600;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 5px;
+    color: $accent;
 }
 
 QFrame#Panel {
@@ -483,6 +499,7 @@ def build_stylesheet() -> str:
         bg_input=BG_INPUT,
         bg_hover=BG_HOVER,
         bg_panel=BG_PANEL,
+        bg_elevated=BG_ELEVATED,
         border=BORDER,
         border_light=BORDER_LIGHT,
         text_main=TEXT_MAIN,
