@@ -130,7 +130,6 @@ def run_restore(
 
 
 def auto_map_users(source_users: List[str]) -> Dict[str, str]:
-    """Auto-map source users to destination users by matching usernames (case-insensitive)."""
     dest_profiles = detect_user_profiles()
     dest_users = {profile.username.lower(): profile.username for profile in dest_profiles}
     mapping = {}

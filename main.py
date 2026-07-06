@@ -1,16 +1,3 @@
-"""
-main.py — BackupTool GUI (PySide6)
-
-Ponto de entrada da aplicação migrada de CustomTkinter para PySide6.
-Nenhuma lógica de negócio vive aqui — apenas inicialização do
-QApplication, aplicação do tema escuro e exibição da MainWindow.
-
-Estrutura (ver instruções de migração):
-  ui/            → janela principal, cabeçalho, stepper, status bar, páginas
-  styles/        → paleta de cores + QSS + ícones
-  core/, config/ → módulos de negócio já existentes no projeto (inalterados)
-"""
-
 from __future__ import annotations
 
 import os

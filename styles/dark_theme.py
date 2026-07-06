@@ -16,7 +16,7 @@ BG_APP        = "#1C2330"   # Fundo geral da janela
 BG_HEADER     = "#202734"   # Barra superior / rodapé
 BG_CARD       = "#252D3D"   # Cards e superfícies elevadas
 BG_CARD_ALT   = "#232B3A"   # Linhas alternadas de tabela
-BG_INPUT      = "#1A2130"   # Campos de entrada
+BG_INPUT      = "#111116"   # Fundo escuro e profundo para inputs
 BG_HOVER      = "#2D3950"   # Hover genérico
 BG_PANEL      = "#2A3346"   # Painéis internos (dentro de cards)
 BG_ELEVATED   = "#2B2B36"   # Nível de elevação para GroupBox / Panels
@@ -83,10 +83,10 @@ QFrame#Card {
 }
 
 QGroupBox {
-    background-color: $bg_elevated;
+    background-color: transparent;
     border: 1px solid $border;
     border-radius: $radius_sm px;
-    margin-top: 1.2em;
+    margin-top: 1.5ex;
     font-weight: 600;
 }
 QGroupBox::title {
