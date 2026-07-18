@@ -4,7 +4,6 @@ from typing import Optional
 
 
 SYSTEM = platform.system()
-DOMAIN_NETBIOS = "SANTACASABA"
 
 
 class ProfileError(Exception):
@@ -20,14 +19,15 @@ def is_admin() -> bool:
         return False
 
 
-def _lookup_sid(username: str, domain: str = DOMAIN_NETBIOS) -> str:
+def _lookup_sid(username: str, domain: str = "") -> str:
     if SYSTEM != "Windows":
         raise ProfileError("Only available on Windows")
     
-    advapi32 = ctypes.windll.advapi32
+    advapi32 = ctypes.WinDLL('advapi32', use_last_error=True)
     kernel32 = ctypes.windll.kernel32
     
     # LookupAccountNameW parameters
+    account_name = f"{domain}\\{username}" if domain else username
     cbSid = ctypes.c_ulong(0)
     cbReferencedDomainName = ctypes.c_ulong(0)
     peUse = ctypes.c_ulong()
@@ -35,15 +35,16 @@ def _lookup_sid(username: str, domain: str = DOMAIN_NETBIOS) -> str:
     # First call to get buffer sizes
     advapi32.LookupAccountNameW(
         None,
-        f"{domain}\\{username}",
+        account_name,
         None,
         ctypes.byref(cbSid),
         None,
         ctypes.byref(cbReferencedDomainName),
         ctypes.byref(peUse),
     )
-    if ctypes.get_last_error() != 122:  # ERROR_INSUFFICIENT_BUFFER
-        raise ProfileError(f"Failed to get account info (error: {ctypes.get_last_error()})")
+    last_err = ctypes.get_last_error()
+    if last_err != 122:  # ERROR_INSUFFICIENT_BUFFER
+        raise ProfileError(f"Failed to get account info (error: {last_err})")
     
     # Allocate buffers
     sid = ctypes.create_string_buffer(cbSid.value)
@@ -52,7 +53,7 @@ def _lookup_sid(username: str, domain: str = DOMAIN_NETBIOS) -> str:
     # Second call to get actual data
     success = advapi32.LookupAccountNameW(
         None,
-        f"{domain}\\{username}",
+        account_name,
         sid,
         ctypes.byref(cbSid),
         referenced_domain_name,
@@ -60,7 +61,8 @@ def _lookup_sid(username: str, domain: str = DOMAIN_NETBIOS) -> str:
         ctypes.byref(peUse),
     )
     if not success:
-        raise ProfileError(f"Failed to lookup account (error: {ctypes.get_last_error()})")
+        last_err = ctypes.get_last_error()
+        raise ProfileError(f"Failed to lookup account (error: {last_err})")
     
     # Convert SID to string
     ConvertSidToStringSidW = advapi32.ConvertSidToStringSidW
@@ -69,7 +71,8 @@ def _lookup_sid(username: str, domain: str = DOMAIN_NETBIOS) -> str:
     
     sid_string_ptr = ctypes.c_wchar_p()
     if not ConvertSidToStringSidW(sid, ctypes.byref(sid_string_ptr)):
-        raise ProfileError(f"Failed to convert SID to string (error: {ctypes.get_last_error()})")
+        last_err = ctypes.get_last_error()
+        raise ProfileError(f"Failed to convert SID to string (error: {last_err})")
     
     sid_string = sid_string_ptr.value
     
@@ -85,27 +88,21 @@ def _profile_path_from_registry(sid: str) -> Optional[str]:
     
     try:
         import winreg
-        key = winreg.OpenKey(
+        with winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE,
             r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
-        )
-        
-        try:
-            user_key = winreg.OpenKey(key, sid)
-            profile_image_path, _ = winreg.QueryValueEx(user_key, "ProfileImagePath")
-            return profile_image_path
-        except FileNotFoundError:
-            return None
-        finally:
+        ) as key:
             try:
-                winreg.CloseKey(user_key)
-            except:
-                pass
+                with winreg.OpenKey(key, sid) as user_key:
+                    profile_image_path, _ = winreg.QueryValueEx(user_key, "ProfileImagePath")
+                    return profile_image_path
+            except FileNotFoundError:
+                return None
     except Exception:
         return None
 
 
-def create_or_get_profile_path(username: str, domain: str = DOMAIN_NETBIOS) -> str:
+def create_or_get_profile_path(username: str, domain: str = "") -> str:
     if SYSTEM != "Windows":
         raise ProfileError("Only available on Windows")
     
@@ -116,7 +113,7 @@ def create_or_get_profile_path(username: str, domain: str = DOMAIN_NETBIOS) -> s
     
     # Define CreateProfile from userenv.dll
     userenv = ctypes.windll.userenv
-    CreateProfile = userenv.CreateProfileW
+    CreateProfile = userenv.CreateProfile
     CreateProfile.restype = ctypes.c_long
     CreateProfile.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_ulong]
     

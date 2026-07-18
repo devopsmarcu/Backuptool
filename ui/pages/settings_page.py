@@ -59,6 +59,12 @@ class SettingsPage(QWidget):
         self.technician_entry = QLineEdit(self.state.technician)
         session_row.addWidget(self.technician_entry, 1)
         session_card.body_layout().addLayout(session_row)
+        
+        domain_row = QHBoxLayout()
+        domain_row.addWidget(QLabel("Domínio (NetBIOS) — deixe vazio para ambiente sem domínio:"))
+        self.domain_entry = QLineEdit(self.state.domain_netbios)
+        domain_row.addWidget(self.domain_entry, 1)
+        session_card.body_layout().addLayout(domain_row)
         root.addWidget(session_card)
 
         btn_save = PrimaryButton("Salvar alterações")
@@ -69,4 +75,5 @@ class SettingsPage(QWidget):
         self.state.exclusions = [l.strip() for l in self.excl_text.toPlainText().splitlines() if l.strip()]
         self.state.excl_exts = [l.strip() for l in self.ext_text.toPlainText().splitlines() if l.strip()]
         self.state.technician = self.technician_entry.text().strip() or self.state.technician
+        self.state.domain_netbios = self.domain_entry.text().strip()
         QMessageBox.information(self, "Configurações", "Alterações salvas com sucesso.")

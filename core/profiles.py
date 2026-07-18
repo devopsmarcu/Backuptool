@@ -51,7 +51,16 @@ class UserProfile:
 
 def get_profiles_root() -> str:
     if SYSTEM == "Windows":
-        return r"C:\Users"
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+            ) as key:
+                profiles_dir, _ = winreg.QueryValueEx(key, "ProfilesDirectory")
+                return profiles_dir
+        except Exception:
+            return r"C:\Users"
     return "/home"
 
 
@@ -88,7 +97,8 @@ def detect_user_profiles(root: str | None = None) -> List[UserProfile]:
     return profiles
 
 
-def corporate_restore_destination(username: str) -> str:
-    if SYSTEM == "Windows":
-        return os.path.join(r"C:\Users", f"{username}.SANTACASABA")
-    return os.path.join("/home", f"{username}.SANTACASABA")
+def corporate_restore_destination(username: str, domain: str = "") -> str:
+    root = get_profiles_root()
+    if domain:
+        return os.path.join(root, f"{username}.{domain}")
+    return os.path.join(root, username)

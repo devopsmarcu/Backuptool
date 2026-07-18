@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict
 
 from core.manifest import Manifest, ManifestEntry, sha256_file, load_manifest, prepare_backup_path
 from core.profiles import corporate_restore_destination, detect_user_profiles
@@ -50,6 +50,8 @@ class CorporateRestorePlan:
     source_username: str
     destination_username: str
     destination: str
+    domain: str = ""
+    temp_dir: Optional[str] = None
     missing_files: int = 0
     corrupted_files: int = 0
 
@@ -146,13 +148,13 @@ def auto_map_users(source_users: List[str]) -> Dict[str, str]:
     return mapping
 
 
-def discover_corporate_restore_plans(backup_dir: str, user_mapping: Optional[Dict[str, str]] = None) -> List[CorporateRestorePlan]:
+def discover_corporate_restore_plans(backup_dir: str, user_mapping: Optional[Dict[str, str]] = None, domain: str = "") -> List[CorporateRestorePlan]:
     actual_backup_dir, temp_dir = prepare_backup_path(backup_dir)
     try:
         users_dir = os.path.join(actual_backup_dir, "usuarios")
         if not os.path.isdir(users_dir):
             return []
-
+        
         # Get all source users
         source_users = []
         for username in sorted(os.listdir(users_dir), key=str.lower):
@@ -182,14 +184,14 @@ def discover_corporate_restore_plans(backup_dir: str, user_mapping: Optional[Dic
                 user_dir=user_dir,
                 source_username=source_user,
                 destination_username=dest_user,
-                destination=corporate_restore_destination(dest_user),
+                destination=corporate_restore_destination(dest_user, domain),
+                domain=domain,
+                temp_dir=temp_dir,
             ))
         return plans
     finally:
-        if temp_dir:
-            # Wait! Don't delete temp_dir here if we're returning plans that use it!
-            # For now, just don't delete and let the caller handle it
-            pass
+        # Do not delete temp_dir here, let run_corporate_restore handle it
+        pass
 
 
 def validate_corporate_restore_plan(plan: CorporateRestorePlan) -> CorporateRestorePlan:
@@ -214,22 +216,29 @@ def run_corporate_restore(
     conflict_callback: Optional[Callable[[str], bool]] = None,
     on_progress: Optional[Callable[[str, int, int, str, int, int], None]] = None,
     stop_flag: Optional[Callable[[], bool]] = None,
+    domain: str = "",
 ) -> MultiUserRestoreResult:
     started = datetime.now()
     result = MultiUserRestoreResult()
     total_files = sum(len(plan.manifest.files) for plan in plans)
     done_before_user = 0
+    
+    # Collect unique temp_dirs to clean up
+    temp_dirs_to_clean = set()
 
     for plan in plans:
         if stop_flag and stop_flag():
             break
         
+        if plan.temp_dir:
+            temp_dirs_to_clean.add(plan.temp_dir)
+            
         original_destination = plan.destination
         
         # Try to get or create Windows profile
         if platform.system() == "Windows" and create_or_get_profile_path and ProfileError:
             try:
-                plan.destination = create_or_get_profile_path(plan.destination_username)
+                plan.destination = create_or_get_profile_path(plan.destination_username, domain)
             except ProfileError as e:
                 result.details.append({
                     "status": "warning",
@@ -270,6 +279,12 @@ def run_corporate_restore(
     result.corrupted = sum(item["result"].corrupted for item in result.user_results)
     result.errors = sum(item["result"].errors for item in result.user_results)
     result.elapsed_seconds = (datetime.now() - started).total_seconds()
+    
+    # Clean up unique temp_dirs
+    for temp_dir in temp_dirs_to_clean:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
     return result
 
 

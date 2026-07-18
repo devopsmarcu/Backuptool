@@ -50,6 +50,7 @@ class AppState:
 
     # Sessão
     technician: str = field(default_factory=socket.gethostname)
+    domain_netbios: str = ""
 
     def reset_for_new_run(self):
         """Equivalente ao antigo `_restart_process` (apenas o estado, sem UI)."""

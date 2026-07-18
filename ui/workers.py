@@ -216,11 +216,12 @@ class CorporateRestoreWorker(QThread):
     failed = Signal(str)
     confirm_conflict = Signal(str, object)
 
-    def __init__(self, plans, conflict_mode, logs_dir, parent=None):
+    def __init__(self, plans, conflict_mode, logs_dir, domain: str = "", parent=None):
         super().__init__(parent)
         self.plans = plans
         self.conflict_mode = conflict_mode
         self.logs_dir = logs_dir
+        self.domain = domain
         self._stop_flag = False
 
     def request_stop(self):
@@ -243,6 +244,7 @@ class CorporateRestoreWorker(QThread):
                 conflict_callback=self._conflict_callback if self.conflict_mode == "ask" else None,
                 on_progress=on_progress,
                 stop_flag=lambda: self._stop_flag,
+                domain=self.domain,
             )
             json_path, csv_path = generate_multi_user_restore_report(result, output_dir=self.logs_dir)
             self.finished_ok.emit(result, json_path, csv_path)

@@ -7,8 +7,7 @@ SYSTEM = platform.system()  # 'Windows' or 'Linux'
 def get_default_paths():
     paths = []
     if SYSTEM == "Windows":
-        user = os.environ.get("USERNAME", "Usuario")
-        base = f"C:\\Users\\{user}"
+        base = os.environ.get("USERPROFILE", f"C:\\Users\\{os.environ.get('USERNAME', 'Usuario')}")
         candidates = [
             os.path.join(base, "Desktop"),
             os.path.join(base, "Documents"),
@@ -18,8 +17,7 @@ def get_default_paths():
             os.path.join(base, "Music"),
         ]
     else:
-        user = os.environ.get("USER", "usuario")
-        base = f"/home/{user}"
+        base = os.environ.get("HOME", f"/home/{os.environ.get('USER', 'usuario')}")
         candidates = [
             os.path.join(base, "Desktop"),
             os.path.join(base, "Documentos"),

@@ -12,12 +12,14 @@ class SftpClient:
         username: str = "",
         password: str = "",
         private_key_path: Optional[str] = None,
+        known_hosts_path: Optional[str] = None,
     ):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.private_key_path = private_key_path
+        self.known_hosts_path = known_hosts_path
         self.ssh_client: Optional[paramiko.SSHClient] = None
         self.sftp_client: Optional[paramiko.SFTPClient] = None
 
@@ -25,7 +27,9 @@ class SftpClient:
         """Connect to SFTP server."""
         try:
             self.ssh_client = paramiko.SSHClient()
-            self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            if self.known_hosts_path:
+                self.ssh_client.load_host_keys(self.known_hosts_path)
             
             if self.private_key_path and os.path.exists(self.private_key_path):
                 private_key = paramiko.RSAKey.from_private_key_file(self.private_key_path)

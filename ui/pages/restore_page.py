@@ -244,7 +244,7 @@ class RestorePage(QWidget):
         self.state.corporate_restore_plans = []
         self._clear_layout(self.preview_layout)
         try:
-            plans = discover_corporate_restore_plans(backup_dir)
+            plans = discover_corporate_restore_plans(backup_dir, domain=self.state.domain_netbios)
             if plans:
                 self.state.restore_manifest = None
                 self.state.corporate_restore_plans = [validate_corporate_restore_plan(p) for p in plans]
@@ -293,15 +293,14 @@ class RestorePage(QWidget):
             ok = not (plan.missing_files or plan.corrupted_files)
             status_icon = icon_html('check' if ok else 'warning', color=theme.SUCCESS if ok else theme.WARNING)
             text = (
-                f"{status_icon} {user}\n"
-                f"Destino: {plan.destination}\n"
+                f"{status_icon} {user}<br>"
+                f"Destino: {plan.destination}<br>"
                 f"Arquivos: {plan.manifest.total_files} · "
                 f"Ausentes: {plan.missing_files} · Corrompidos: {plan.corrupted_files}"
             )
             lbl = QLabel(text)
             lbl.setWordWrap(True)
             self.preview_layout.insertWidget(self.preview_layout.count() - 1, lbl)
-
     def _populate_selection(self, manifest: Manifest):
         self.selection_list.clear()
         self._selection_items.clear()
@@ -332,6 +331,7 @@ class RestorePage(QWidget):
             self._begin_common()
             self._worker = CorporateRestoreWorker(
                 self.state.corporate_restore_plans, self._current_conflict_mode(), self.logs_dir,
+                domain=self.state.domain_netbios,
             )
             self._worker.progress.connect(self._on_corporate_progress)
             self._worker.finished_ok.connect(self._on_corporate_finished)
