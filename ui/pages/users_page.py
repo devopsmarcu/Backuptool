@@ -176,7 +176,7 @@ class UsersPage(QWidget):
         self.table.clicked.connect(self._on_row_clicked)
         root.addWidget(self.table, 1)
 
-        self.empty_state = EmptyState("👤", "Nenhum usuário encontrado",
+        self.empty_state = EmptyState("user", "Nenhum usuário encontrado",
                                        "Ajuste o filtro de busca ou atualize a lista de usuários.")
         self.empty_state.setVisible(False)
         root.addWidget(self.empty_state)

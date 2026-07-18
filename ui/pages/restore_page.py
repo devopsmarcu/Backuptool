@@ -28,6 +28,8 @@ import platform
 
 from core.manifest import load_manifest, Manifest
 from core.restore import get_manifest_roots, discover_corporate_restore_plans, validate_corporate_restore_plan
+from styles import dark_theme as theme
+from styles.svg_icons import icon_html
 from ui.format_utils import format_duration, estimate_remaining, short_path, friendly_error
 from ui.os_utils import open_path
 from ui.state import AppState
@@ -248,7 +250,7 @@ class RestorePage(QWidget):
                 self.state.corporate_restore_plans = [validate_corporate_restore_plan(p) for p in plans]
                 total_files = sum(p.manifest.total_files for p in self.state.corporate_restore_plans)
                 self.lbl_manifest_info.setText(
-                    f"✔ backup corporativo carregado — "
+                    f"{icon_html('check', color=theme.SUCCESS)} backup corporativo carregado — "
                     f"{len(self.state.corporate_restore_plans)} usuários · {total_files} arquivos"
                 )
                 self.lbl_manifest_info.setStyleSheet("color: #22C55E;")
@@ -258,7 +260,7 @@ class RestorePage(QWidget):
             manifest = load_manifest(backup_dir)
             self.state.restore_manifest = manifest
             self.lbl_manifest_info.setText(
-                f"✔ manifest.json carregado — {manifest.total_files} arquivos · "
+                f"{icon_html('check', color=theme.SUCCESS)} manifest.json carregado — {manifest.total_files} arquivos · "
                 f"{self._human(manifest.total_size)} · backup de {manifest.backup_date[:10]} · "
                 f"máquina: {manifest.machine}"
             )
@@ -288,9 +290,10 @@ class RestorePage(QWidget):
         self._clear_layout(self.preview_layout)
         for plan in self.state.corporate_restore_plans:
             user = plan.manifest.user or os.path.basename(plan.user_dir)
-            status = "✓" if not (plan.missing_files or plan.corrupted_files) else "⚠"
+            ok = not (plan.missing_files or plan.corrupted_files)
+            status_icon = icon_html('check' if ok else 'warning', color=theme.SUCCESS if ok else theme.WARNING)
             text = (
-                f"{status} {user}\n"
+                f"{status_icon} {user}\n"
                 f"Destino: {plan.destination}\n"
                 f"Arquivos: {plan.manifest.total_files} · "
                 f"Ausentes: {plan.missing_files} · Corrompidos: {plan.corrupted_files}"
@@ -430,7 +433,7 @@ class RestorePage(QWidget):
         self.btn_stop.setEnabled(False)
         self.state.last_restore_report_path = json_path
 
-        parts = [f"✔ {result.restored} restaurados"]
+        parts = [f"{icon_html('check', color=theme.SUCCESS)} {result.restored} restaurados"]
         if result.overwritten: parts.append(f"{result.overwritten} sobrescritos")
         if result.skipped: parts.append(f"{result.skipped} ignorados")
         if result.corrupted: parts.append(f"{result.corrupted} corrompidos")

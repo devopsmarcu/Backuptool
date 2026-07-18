@@ -24,6 +24,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QL
 
 from core.destinations import validate_destination
 from core.scanner import human_size, total_size
+from styles import dark_theme as theme
+from styles.svg_icons import icon_html
 from ui.format_utils import format_duration, estimate_remaining, short_path, friendly_error
 from ui.os_utils import open_path
 from ui.state import AppState
@@ -200,10 +202,10 @@ class BackupPage(QWidget):
         self.state.last_report_path = report_path
 
         if result.errors == 0:
-            msg = f"✔ Concluído — {result.copied} arquivos copiados"
+            msg = f"{icon_html('check', color=theme.SUCCESS)} Concluído — {result.copied} arquivos copiados"
             self.lbl_final_status.setStyleSheet("color: #22C55E; font-weight: 700;")
         else:
-            msg = f"⚠ Concluído com erros — {result.copied} copiados, {result.errors} erros"
+            msg = f"{icon_html('warning', color=theme.WARNING)} Concluído com erros — {result.copied} copiados, {result.errors} erros"
             self.lbl_final_status.setStyleSheet("color: #F59E0B; font-weight: 700;")
 
         self.lbl_final_status.setText(msg)

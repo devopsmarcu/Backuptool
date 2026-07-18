@@ -48,14 +48,14 @@ class SummaryPage(QWidget):
 
         # Mapeamento de Ícones para cada card de resumo
         card_configs = [
-            ("dest", "Destino", "📂"),
-            ("stats", "Estatísticas", "📊"),
-            ("users", "Usuários", "👤"),
-            ("excl", "Exclusões", "🚫"),
+            ("dest", "Destino", "folder"),
+            ("stats", "Estatísticas", "chart"),
+            ("users", "Usuários", "user"),
+            ("excl", "Exclusões", "forbidden"),
         ]
 
-        for key, title, icon in card_configs:
-            card = SummaryStatCard(icon, title)
+        for key, title, icon_name in card_configs:
+            card = SummaryStatCard(icon_name, title)
             # A SummaryStatCard já cria o label interno, vamos capturá-lo para atualizar o texto
             # Como o label está no layout, precisamos de uma forma de acessá-lo.
             # Vamos adicionar um método `set_value` ao SummaryStatCard (já fizemos no Write anterior).

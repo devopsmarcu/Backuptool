@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from styles.icons import icon_add
 from styles import dark_theme as theme
+from styles.svg_icons import icon_label
 
 
 class Card(QFrame):
@@ -132,7 +133,7 @@ class SearchBox(QFrame):
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(6)
 
-        lens = QLabel("🔍")
+        lens = icon_label("search", size=16, color=theme.TEXT_MUTED)
         self.input = QLineEdit()
         self.input.setObjectName("SearchInput")
         self.input.setPlaceholderText(placeholder)
@@ -152,14 +153,12 @@ class EmptyState(QWidget):
     """Estado vazio elegante (ícone + título + descrição), usado quando uma
     lista/tabela ainda não tem dados para mostrar."""
 
-    def __init__(self, icon: str, title: str, description: str, parent=None):
+    def __init__(self, icon_name: str, title: str, description: str, parent=None):
         super().__init__(parent)
         outer = QVBoxLayout(self)
         outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon_lbl = QLabel(icon)
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 40px;")
+        icon_lbl = icon_label(icon_name, size=40, color=theme.TEXT_DIM)
 
         title_lbl = QLabel(title)
         title_lbl.setObjectName("SectionTitle")
@@ -211,7 +210,7 @@ class MetricTile(QFrame):
 
 class SummaryStatCard(QFrame):
     """Card de estatística para a tela de resumo (Ícone + Título + Valor)."""
-    def __init__(self, icon: str, title: str, value: str = "Aguardando scan...", parent=None):
+    def __init__(self, icon_name: str, title: str, value: str = "Aguardando scan...", parent=None):
         super().__init__(parent)
         self.setObjectName("Card")
         layout = QVBoxLayout(self)
@@ -219,9 +218,7 @@ class SummaryStatCard(QFrame):
         layout.setSpacing(12)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon_lbl = QLabel(icon)
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 28px;")
+        icon_lbl = icon_label(icon_name, size=28, color=theme.ACCENT)
         layout.addWidget(icon_lbl, 0, Qt.AlignmentFlag.AlignCenter)
 
         title_lbl = QLabel(title)

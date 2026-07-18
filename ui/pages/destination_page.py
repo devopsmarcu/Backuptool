@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from core.destinations import detect_external_drives
 from styles import dark_theme as theme
 from styles.icons import icon_drive, icon_refresh, icon_folder
+from styles.svg_icons import icon_html
 from ui.state import AppState
 from ui.widgets import Card, SectionIntro, PrimaryButton, SecondaryButton, EmptyState
 
@@ -92,8 +93,8 @@ class DestinationPage(QWidget):
 
         drives = detect_external_drives()
         if not drives:
-            empty = EmptyState("💿", "Nenhum dispositivo detectado",
-                                "Tente conectar um HD externo ou mapear uma unidade de rede.")
+            empty = EmptyState("disc", "Nenhum dispositivo detectado",
+                               "Tente conectar um HD externo ou mapear uma unidade de rede.")
             self.drives_layout.insertWidget(0, empty)
             return
 
@@ -115,7 +116,7 @@ class DestinationPage(QWidget):
 
     def _select_drive(self, path: str):
         self.dest_entry.setText(path)
-        self.lbl_status.setText(f"✔ Selecionado: {path}")
+        self.lbl_status.setText(f"{icon_html('check', color=theme.SUCCESS)} Selecionado: {path}")
         self.lbl_status.setStyleSheet(f"color: {theme.SUCCESS};")
 
     def _browse_dest(self):
