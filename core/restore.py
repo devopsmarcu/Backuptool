@@ -1,4 +1,5 @@
 import os
+import platform
 import shutil
 import csv
 import json
@@ -13,6 +14,12 @@ from core.manifest import Manifest, ManifestEntry, sha256_file, load_manifest, p
 from core.profiles import corporate_restore_destination, detect_user_profiles
 from core.scanner import human_size
 from core.compression import decompress_zip
+
+try:
+    from core.win_profile import create_or_get_profile_path, ProfileError
+except ImportError:
+    create_or_get_profile_path = None
+    ProfileError = None
 
 
 @dataclass
@@ -216,6 +223,21 @@ def run_corporate_restore(
     for plan in plans:
         if stop_flag and stop_flag():
             break
+        
+        original_destination = plan.destination
+        
+        # Try to get or create Windows profile
+        if platform.system() == "Windows" and create_or_get_profile_path and ProfileError:
+            try:
+                plan.destination = create_or_get_profile_path(plan.destination_username)
+            except ProfileError as e:
+                result.details.append({
+                    "status": "warning",
+                    "source": f"user:{plan.destination_username}",
+                    "dest": original_destination,
+                    "reason": f"Perfil não registrado no Windows ({e}) — usando destino heurístico"
+                })
+        
         os.makedirs(plan.destination, exist_ok=True)
         user = plan.manifest.user or os.path.basename(plan.user_dir)
 

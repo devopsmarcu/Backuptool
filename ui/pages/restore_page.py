@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QSizePolicy,
 )
 
+import platform
+
 from core.manifest import load_manifest, Manifest
 from core.restore import get_manifest_roots, discover_corporate_restore_plans, validate_corporate_restore_plan
 from ui.format_utils import format_duration, estimate_remaining, short_path, friendly_error
@@ -31,6 +33,11 @@ from ui.os_utils import open_path
 from ui.state import AppState
 from ui.widgets import Card, SectionIntro, RestoreActionButton, DangerButton, SecondaryButton, MetricTile
 from ui.workers import RestoreWorker, CorporateRestoreWorker
+
+try:
+    from core.win_profile import is_admin
+except ImportError:
+    is_admin = None
 
 
 class RestorePage(QWidget):
@@ -310,6 +317,15 @@ class RestorePage(QWidget):
     # ── execução ──
     def _start_restore(self):
         if self.state.corporate_restore_plans:
+            # Check admin privileges on Windows for corporate restore
+            if platform.system() == "Windows" and is_admin and not is_admin():
+                QMessageBox.critical(
+                    self,
+                    "Administrador necessário",
+                    "A restauração corporativa precisa ser executada como Administrador para registrar os perfis corretamente no Windows."
+                )
+                return
+            
             self._begin_common()
             self._worker = CorporateRestoreWorker(
                 self.state.corporate_restore_plans, self._current_conflict_mode(), self.logs_dir,
