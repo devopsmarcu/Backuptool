@@ -8,7 +8,7 @@ Ferramenta desktop para backup e restauração de perfis de usuário em estaçõ
 
 O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de formatações de estações de trabalho. A ferramenta automatiza o processo de identificação, cópia e restauração de arquivos de perfis de usuário, eliminando etapas manuais e reduzindo o risco de perda de dados durante procedimentos de reinstalação do sistema operacional.
 
-**Problema resolvido:** em ambientes corporativos com múltiplos usuários por máquina, o processo de backup pré-formatação é frequentemente manual, propenso a erros e sem rastreabilidade. O BackupTool padroniza esse processo, gera auditoria completa e viabiliza a restauração controlada posterior.
+**Problema resolvido:** em ambientes corporativos com múltiplos usuários por máquina — muitas vezes ingressados em domínio Active Directory — o processo de backup pré-formatação é frequentemente manual, propenso a erros e sem rastreabilidade. O BackupTool padroniza esse processo, gera auditoria completa e viabiliza a restauração controlada posterior, inclusive para máquinas onde o perfil do usuário ainda não existe no Windows.
 
 **Público-alvo:** técnicos de suporte de TI com privilégios administrativos em estações de trabalho Windows e Linux.
 
@@ -16,13 +16,18 @@ O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de format
 
 ## Novidades na Versão Atual
 
-- **Interface Responsiva Completa**: adapta-se automaticamente a diferentes resoluções (de 1366x768 a telas ultrawide)
-- **DPI Awareness Moderna**: suporte a escalas de 100% a 200% no Windows, sem fontes borradas
-- **Sistema de Fontes Dinâmicas**: fontes escalonadas com base na resolução e DPI do monitor
-- **Layout Melhorado para Telas Ultrawide**: cards de resumo distribuídos em até 4 colunas para aproveitar espaço
-- **CTkScrollableFrame em Todas as Áreas Críticas**: nenhum conteúdo é cortado, mesmo com muitos itens
-- **Remoção de Larguras Fixas**: todos os widgets expandem para preencher o espaço disponível
-- **Cabeçalho Ajustado**: sem truncamento de texto no lado direito
+- **Migração completa da interface para PySide6/Qt**: a antiga interface CustomTkinter foi substituída por um assistente (wizard) em `ui/`, com tema escuro próprio (`styles/dark_theme.py`) e ícones SVG
+- **Backup multiusuário**: seleção de múltiplos perfis detectados na máquina (`core/profiles.py`) em uma única execução, com relatório consolidado por usuário
+- **Restauração corporativa (multiusuário) com mapeamento de perfis**: a partir de um backup contendo vários usuários, cada um pode ser restaurado para um usuário de destino diferente (`auto_map_users`, mapeamento manual)
+- **Suporte a domínio Active Directory na restauração**: quando o perfil de destino ainda não existe na máquina (ex.: reinstalação limpa ingressada no domínio), o BackupTool chama a API `CreateProfile` do Windows (`core/win_profile.py`) para registrar o perfil corretamente no `ProfileList` do registro antes de copiar os arquivos, evitando o problema clássico de perfis "soltos" fora do SID correto
+- **Backup incremental (motor pronto)**: `core/backup.py` já é capaz de comparar contra um manifest anterior e classificar arquivos em novos/modificados/inalterados (`analyze_incremental`)
+- **Compressão ZIP opcional (motor pronto)**: `core/compression.py` permite compactar o diretório de backup com níveis configuráveis
+- **Cliente SFTP (motor pronto)**: `core/sftp.py` (via `paramiko`) permite enviar/baixar arquivos para um destino remoto
+- **Verificação de espaço em disco**: `core/destinations.py` valida espaço livre no destino antes da operação
+- **Relatórios em HTML, além de JSON/CSV**: `core/report.py` gera relatório navegável em HTML para backups e restaurações
+- **Suíte de testes com `pytest`**: `tests/` cobre backup, compressão e manifest
+
+> Os itens marcados como "motor pronto" existem e são testáveis em `core/`, mas ainda não possuem controle correspondente na interface gráfica — veja [Limitações](#desempenho-e-limitações).
 
 ---
 
@@ -30,45 +35,56 @@ O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de format
 
 ### Arquitetura identificada
 
-Aplicação desktop monolítica com separação em camadas: interface gráfica (`main.py`), módulos de domínio (`core/`) e configuração (`config/`). Sem servidor, sem banco de dados, sem dependências de rede em tempo de execução.
+Aplicação desktop monolítica com separação em camadas: interface gráfica em Qt/PySide6 (`main.py` + `ui/`), módulos de domínio (`core/`), configuração (`config/`) e estilos/recursos (`styles/`, `resources/`). Sem servidor, sem banco de dados; a única dependência de rede em tempo de execução é opcional (cliente SFTP, ainda não exposto na UI).
 
 ### Componentes principais
 
 | Componente | Arquivo | Responsabilidade |
 |---|---|---|
-| Interface gráfica | `main.py` | Orquestração da UI, navegação entre abas, disparo de operações em threads |
+| Entry point | `main.py` | Bootstrap do `QApplication`, fonte global, tema (`Fusion` + QSS escuro) e abertura da `MainWindow` |
+| Janela principal | `ui/main_window.py` | Orquestra cabeçalho, stepper e páginas do wizard; não contém regra de negócio |
+| Estado compartilhado | `ui/state.py` | `AppState` — dataclass única lida/escrita pelas páginas (origem, usuários, destino, scan, backup, restauração, sessão) |
+| Workers assíncronos | `ui/workers.py` | `QThread`s que chamam as funções de `core/` (scan, backup, restore, restore corporativo) fora da thread da UI |
+| Páginas do wizard | `ui/pages/*.py` | Usuários, Origem, Destino, Resumo, Backup, Restaurar, Logs, Configurações |
+| Stepper | `ui/navigation.py` | Indicador de etapas com navegação livre para etapas já visitadas |
 | Scanner | `core/scanner.py` | Varredura recursiva de diretórios com filtragem de exclusões |
-| Engine de backup | `core/backup.py` | Cópia de arquivos com cálculo de SHA-256 e geração de estrutura de backup |
+| Engine de backup | `core/backup.py` | Cópia de arquivos com SHA-256, backup incremental, compressão opcional, backup multiusuário |
 | Manifest | `core/manifest.py` | Serialização/desserialização do `manifest.json`, extração de usuários |
-| Engine de restauração | `core/restore.py` | Restauração por modo, verificação de integridade, tratamento de conflitos |
-| Detecção de destinos | `core/destinations.py` | Enumeração de drives externos e validação do destino |
-| Relatórios | `core/report.py` | Geração de relatórios de backup em JSON e CSV |
+| Engine de restauração | `core/restore.py` | Restauração simples (por manifest único) e restauração corporativa multiusuário com mapeamento e suporte a domínio |
+| Perfis de usuário | `core/profiles.py` | Detecção de perfis locais e cálculo do destino de restauração corporativa (`usuario` ou `usuario.DOMINIO`) |
+| Perfil Windows/AD | `core/win_profile.py` | Resolução de SID (`LookupAccountNameW`) e criação de perfil via `CreateProfile` (`userenv.dll`) quando o perfil de destino ainda não existe |
+| Detecção de destinos | `core/destinations.py` | Enumeração de drives externos, verificação de espaço livre, validação do destino |
+| Compressão | `core/compression.py` | Compactação/descompactação ZIP do diretório de backup |
+| Cliente SFTP | `core/sftp.py` | Upload/download via SFTP (`paramiko`), criação recursiva de diretórios remotos |
+| Relatórios | `core/report.py` | Geração de relatórios de backup/restauração em JSON, CSV e HTML |
 | Configuração padrão | `config/defaults.py` | Paths padrão por sistema operacional e listas de exclusão |
+| Tema e ícones | `styles/dark_theme.py`, `styles/icons.py`, `styles/svg_icons.py` | QSS do tema escuro e sistema de ícones SVG |
 
 ### Fluxo geral de funcionamento
 
-**Backup:**
+**Backup (único ou multiusuário):**
 
 ```
-Técnico seleciona usuários (Aba 1)
+Técnico seleciona um ou mais perfis de usuário (página Usuários)
       ↓
-Técnico ajusta origens e exclusões (Aba 2)
+Técnico revisa pastas de origem e exclusões (página Origem)
       ↓
-Técnico seleciona destino (Aba 3)
+Técnico seleciona destino (página Destino) — espaço livre é validado
       ↓
-Sistema escaneia arquivos e exibe resumo (Aba 4)
+Sistema escaneia arquivos e exibe resumo por usuário (página Resumo)
       ↓
-Técnico confirma e inicia backup (Aba 5)
+Técnico confirma e inicia o backup (página Backup)
       ↓
 SHA-256 calculado por arquivo → cópia para Backup_YYYY-MM-DD_HHMMSS/files/
+  (ou .../usuarios/<usuario>/ quando multiusuário)
       ↓
-manifest.json gravado + relatórios JSON e CSV gerados em logs/
+manifest.json gravado por usuário + relatórios JSON, CSV e HTML gerados em logs/
 ```
 
-**Restauração:**
+**Restauração simples (um manifest):**
 
 ```
-Técnico seleciona pasta de backup (Aba 6)
+Técnico seleciona pasta de backup (página Restaurar)
       ↓
 manifest.json carregado e validado
       ↓
@@ -79,17 +95,44 @@ SHA-256 verificado por arquivo antes da cópia
 Arquivos restaurados + relatórios JSON e CSV gerados em logs/
 ```
 
+**Restauração corporativa (multiusuário, com ou sem domínio):**
+
+```
+Técnico seleciona a pasta de um backup multiusuário
+      ↓
+discover_corporate_restore_plans mapeia cada usuário de origem para um
+usuário de destino (automático por nome local, ou manual)
+      ↓
+Para cada plano, se a máquina estiver no Windows:
+   tenta CreateProfile(sid, username) via core/win_profile.py
+      → perfil não existe:  cria e usa o novo ProfileImagePath
+      → perfil já existe:   lê o path já registrado no ProfileList
+      → sem privilégio admin ou outro erro: cai para destino heurístico
+        (C:\Users\usuario ou C:\Users\usuario.DOMINIO) e registra warning
+      ↓
+Arquivos restaurados por usuário, com verificação SHA-256 e política de
+conflito, reconstruindo o caminho relativo ao perfil original
+      ↓
+Relatório consolidado (JSON/CSV) por usuário gerado em logs/
+```
+
 ### Camadas da aplicação
 
-- **Apresentação:** `main.py` — CustomTkinter, execução de operações longas em `threading.Thread` daemon
-- **Domínio:** `core/` — lógica de negócio isolada da UI, testável independentemente
+- **Apresentação:** `main.py` + `ui/` — PySide6/Qt, operações longas em `QThread` (`ui/workers.py`), comunicação com a UI via `Signal`/`Slot`
+- **Domínio:** `core/` — lógica de negócio isolada da UI, testável independentemente (ver `tests/`)
 - **Configuração:** `config/defaults.py` — paths e exclusões padrão derivados do sistema operacional em execução
+- **Apresentação visual:** `styles/` — folha de estilo QSS e sistema de ícones SVG, sem lógica de negócio
 
 ### Integrações existentes
 
-- **Windows API (ctypes):** enumeração de drives lógicos via `GetLogicalDrives` e `GetDriveTypeW`, leitura de rótulos via `GetVolumeInformationW`, DPI awareness via `SetProcessDpiAwareness`
+- **Windows API (ctypes):**
+  - Enumeração de drives lógicos via `GetLogicalDrives`/`GetDriveTypeW`, rótulos via `GetVolumeInformationW` (`core/destinations.py`)
+  - Resolução de SID via `LookupAccountNameW` e conversão via `ConvertSidToStringSidW` (`core/win_profile.py`)
+  - Criação de perfil de usuário via `CreateProfile` (`userenv.dll`) — usada quando o técnico restaura um usuário cujo perfil local ainda não existe, cenário comum logo após o ingresso no domínio (`core/win_profile.py`)
+  - Leitura do `ProfileImagePath` já registrado via `winreg` em `SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList` (`core/profiles.py`, `core/win_profile.py`)
 - **Linux (subprocess/lsblk):** detecção de dispositivos montados em `/media` e `/mnt`
-- Sem integrações com APIs externas, bancos de dados ou serviços de rede
+- **SFTP (paramiko):** cliente pronto em `core/sftp.py` para upload/download remoto; ainda não conectado a nenhuma página da UI
+- Sem integrações com bancos de dados ou APIs externas de terceiros
 
 ---
 
@@ -98,17 +141,17 @@ Arquivos restaurados + relatórios JSON e CSV gerados em logs/
 | Tecnologia | Versão | Finalidade |
 |---|---|---|
 | Python | 3.11+ | Linguagem principal |
-| CustomTkinter | >= 5.2.0 | Interface gráfica moderna baseada em Tkinter |
-| Tkinter | stdlib | Dialogs nativos (`filedialog`, `messagebox`) |
+| PySide6 | >= 6.6 | Interface gráfica (Qt for Python) |
+| paramiko | >= 3.0.0 | Cliente SFTP para destinos remotos |
+| pytest | >= 7.0.0 | Framework de testes automatizados |
 | PyInstaller | Não fixada | Empacotamento em executável portátil |
-| hashlib | stdlib | Cálculo de SHA-256 e MD5 |
-| shutil | stdlib | Cópia de arquivos preservando metadados |
-| pathlib | stdlib | Manipulação de paths cross-platform |
-| threading | stdlib | Execução não bloqueante de operações longas |
-| json | stdlib | Serialização de manifests e relatórios |
-| csv | stdlib | Exportação de relatórios tabulares |
-| dataclasses | stdlib | Estruturas de dados tipadas |
-| ctypes | stdlib | Interação com Windows API |
+| hashlib | stdlib | Cálculo de SHA-256 |
+| shutil | stdlib | Cópia de arquivos preservando metadados, verificação de espaço em disco |
+| zipfile | stdlib | Compactação/descompactação do diretório de backup |
+| pathlib / ntpath | stdlib | Manipulação de paths cross-platform (incluindo paths Windows processados em Linux) |
+| json / csv | stdlib | Serialização de manifests e relatórios |
+| dataclasses | stdlib | Estruturas de dados tipadas (`AppState`, `BackupResult`, `RestoreResult`, `CorporateRestorePlan`, etc.) |
+| ctypes / winreg | stdlib | Interação com Windows API e registro (drives, SID, `CreateProfile`, `ProfileList`) |
 | subprocess | stdlib | Execução de `lsblk` no Linux |
 
 ---
@@ -117,7 +160,9 @@ Arquivos restaurados + relatórios JSON e CSV gerados em logs/
 
 | Dependência | Versão mínima | Finalidade |
 |---|---|---|
-| customtkinter | 5.2.0 | Widgets modernos para a interface gráfica |
+| PySide6 | 6.6 | Interface gráfica |
+| paramiko | 3.0.0 | Cliente SFTP |
+| pytest | 7.0.0 | Testes automatizados |
 
 Todas as demais dependências fazem parte da biblioteca padrão do Python (stdlib) e não requerem instalação adicional.
 
@@ -127,25 +172,60 @@ Todas as demais dependências fazem parte da biblioteca padrão do Python (stdli
 
 ```
 BackupTool/
-├── main.py                  # Entry point e interface gráfica (6 abas)
-├── build.py                 # Script de empacotamento via PyInstaller
-├── requirements.txt         # Dependências Python
+├── main.py                     # Entry point: bootstrap do QApplication e da MainWindow
+├── build.py                    # Script de empacotamento via PyInstaller
+├── requirements.txt            # Dependências Python
 ├── README.md
+├── LICENSE                     # GNU GPL v3
 ├── config/
 │   ├── __init__.py
-│   └── defaults.py          # Paths padrão e exclusões por SO
+│   └── defaults.py             # Paths padrão e exclusões por SO
 ├── core/
 │   ├── __init__.py
-│   ├── scanner.py           # Varredura recursiva de arquivos
-│   ├── backup.py            # Engine de cópia e geração de manifest
-│   ├── manifest.py          # Estruturas ManifestEntry/Manifest, SHA-256, extração de usuários
-│   ├── restore.py           # Engine de restauração e relatório de restore
-│   ├── destinations.py      # Detecção de drives e validação de destino
-│   └── report.py            # Geração de relatório de backup (JSON + CSV)
-└── logs/                    # Gerado automaticamente; contém relatórios de operações
+│   ├── scanner.py              # Varredura recursiva de arquivos
+│   ├── backup.py               # Engine de backup: cópia, SHA-256, incremental, compressão, multiusuário
+│   ├── manifest.py             # Estruturas ManifestEntry/Manifest, SHA-256, extração de usuários
+│   ├── restore.py              # Restauração simples e corporativa (multiusuário/domínio)
+│   ├── profiles.py             # Detecção de perfis locais e destino de restauração corporativa
+│   ├── win_profile.py          # SID lookup + CreateProfile (Windows/AD)
+│   ├── destinations.py         # Detecção de drives, espaço em disco, validação de destino
+│   ├── compression.py          # Compactação/descompactação ZIP
+│   ├── sftp.py                 # Cliente SFTP (paramiko)
+│   └── report.py               # Geração de relatórios (JSON, CSV, HTML)
+├── ui/
+│   ├── main_window.py          # Janela principal, stepper, orquestração das páginas
+│   ├── state.py                # AppState — estado compartilhado entre páginas
+│   ├── workers.py              # QThreads: Scan, Backup, Restore, CorporateRestore
+│   ├── navigation.py           # Stepper horizontal de etapas
+│   ├── toolbar.py              # Cabeçalho / seleção de seção (Wizard / Logs / Configurações)
+│   ├── statusbar.py            # Barra de status inferior
+│   ├── widgets.py              # Componentes reutilizáveis (Card, botões, etc.)
+│   ├── os_utils.py             # Utilitários específicos de SO para a UI
+│   ├── format_utils.py         # Formatação de tamanhos/datas para exibição
+│   └── pages/
+│       ├── users_page.py       # Seleção de perfis de usuário (múltipla)
+│       ├── source_page.py      # Pastas de origem
+│       ├── destination_page.py # Seleção de destino do backup
+│       ├── summary_page.py     # Resumo pré-backup
+│       ├── backup_page.py      # Execução e progresso do backup
+│       ├── restore_page.py     # Restauração simples e corporativa
+│       ├── logs_page.py        # Histórico de relatórios gerados
+│       └── settings_page.py    # Exclusões, técnico responsável, domínio NetBIOS
+├── styles/
+│   ├── dark_theme.py           # Folha de estilo QSS
+│   ├── icons.py                # Ícones nativos da aplicação (janela, etc.)
+│   └── svg_icons.py            # Sistema de ícones SVG
+├── resources/
+│   ├── icons/
+│   └── images/
+├── tests/
+│   ├── test_backup.py
+│   ├── test_compression.py
+│   └── test_manifest.py
+└── logs/                       # Gerado automaticamente; contém relatórios de operações
 ```
 
-**Estrutura gerada em disco durante o backup:**
+**Estrutura gerada em disco durante o backup (single-user):**
 
 ```
 <destino>/
@@ -154,6 +234,20 @@ BackupTool/
     └── files/
         ├── <hash8>_<nome_original>.ext
         └── ...
+```
+
+**Estrutura gerada em disco durante o backup multiusuário:**
+
+```
+<destino>/
+└── Backup_YYYY-MM-DD_HHMMSS/
+    └── usuarios/
+        ├── <usuario1>/
+        │   ├── manifest.json
+        │   └── <hash8>_<nome_original>.ext ...
+        └── <usuario2>/
+            ├── manifest.json
+            └── ...
 ```
 
 ---
@@ -165,16 +259,15 @@ BackupTool/
 | Item | Windows | Linux |
 |---|---|---|
 | Sistema operacional | Windows 10 ou superior | Ubuntu 20.04+ / Debian 11+ ou equivalente |
-| Privilégios | Administrador local | root ou sudo |
+| Privilégios | Administrador local (obrigatório para `CreateProfile` em restaurações de domínio) | root ou sudo |
 | Python | 3.11 ou superior | 3.11 ou superior |
 | Dependências de sistema | Nenhuma adicional | `lsblk` (util-linux, presente por padrão) |
-| Resolução mínima | 1366x768 | 1366x768 |
 
 ### Requisitos para build do executável
 
 - Python 3.11+
 - pip
-- Acesso à internet (para instalação de PyInstaller e customtkinter durante o build)
+- Acesso à internet (para instalação de PyInstaller, PySide6 e paramiko durante o build)
 
 ---
 
@@ -208,522 +301,39 @@ pip install -r requirements.txt
 python main.py
 ```
 
----
+### Restauração com suporte a domínio (Windows + AD)
 
-## Configuração
+Para que a criação automática de perfil (`CreateProfile`) funcione durante a restauração corporativa:
 
-### Arquivo de configuração principal
-
-**`config/defaults.py`**
-
-Não utiliza arquivos externos de configuração (`.ini`, `.yaml`, `.env`). Os parâmetros são definidos diretamente no módulo e podem ser alterados antes do build.
-
-#### Paths padrão por sistema operacional
-
-**Windows** — derivados de `C:\Users\%USERNAME%\`:
-
-```
-Desktop, Documents, Downloads, Pictures, Videos, Music
-```
-
-**Linux** — derivados de `/home/$USER/`:
-
-```
-Desktop, Documentos, Documents, Downloads, Imagens, Pictures, Vídeos, Videos, Músicas, Music
-```
-
-Somente os diretórios que existem em disco são incluídos na lista inicial.
-
-#### Exclusões padrão
-
-**Diretórios excluídos:**
-
-```
-node_modules, .git, __pycache__, .cache, Temp, temp, tmp, .tmp,
-AppData\Local\Temp, AppData\Local\Microsoft\Windows\INetCache,
-AppData\Local\Google\Chrome\User Data\Default\Cache,
-.local/share/Trash, .thumbnails, .mozilla/firefox,
-dist, build, .next, venv, .venv, env
-```
-
-**Extensões excluídas:**
-
-```
-.tmp, .temp, .log, .bak, .DS_Store, Thumbs.db
-```
-
-### Parâmetros configuráveis em tempo de execução
-
-Todos os parâmetros abaixo podem ser alterados diretamente pela interface antes de iniciar o backup:
-
-- Lista de usuários selecionados (detectados automaticamente)
-- Lista de pastas incluídas no backup (adição e remoção individual)
-- Lista de exclusões (editável como texto livre na Aba 2)
+1. Executar o BackupTool **como Administrador** na estação de destino
+2. A estação de destino deve estar ingressada no mesmo domínio (ou domínio confiável) do usuário de origem, para que `LookupAccountNameW` resolva o SID
+3. Na página **Configurações**, preencher o campo **Domínio (NetBIOS)** — deixar vazio para ambientes sem domínio (grupo de trabalho)
+4. Se o perfil de destino não puder ser criado (sem privilégio, SID não resolvido, domínio inacessível), o BackupTool cai automaticamente para o destino heurístico (`C:\Users\usuario` ou `C:\Users\usuario.DOMINIO`) e registra um aviso no relatório da operação — a restauração não é interrompida
 
 ---
 
-## Execução
-
-```bash
-python main.py
-```
-
-A interface abre na Aba 1 (Usuários). A navegação entre abas pode ser feita pelos botões "Voltar" e "Próximo" no rodapé, ou clicando diretamente nas abas.
-
----
-
-## Empacotamento
-
-O script `build.py` automatiza a geração do executável portátil via PyInstaller.
-
-```bash
-python build.py
-```
-
-**Saída gerada:**
-
-| Sistema operacional | Arquivo |
-|---|---|
-| Windows | `dist/BackupTool.exe` |
-| Linux | `dist/BackupTool` |
-
-**Flags utilizadas no PyInstaller:**
-
-| Flag | Efeito |
-|---|---|
-| `--onefile` | Gera binário único sem diretório auxiliar |
-| `--noconsole` | Suprime a janela de console (modo GUI) |
-| `--add-data config:config` | Inclui o pacote `config/` no bundle |
-| `--hidden-import=customtkinter` | Força inclusão do módulo não detectado automaticamente |
-| `--hidden-import=PIL` | Força inclusão do Pillow (dependência interna do CustomTkinter) |
-| `--icon=assets/icon.ico` | Aplica ícone personalizado (Windows, se o arquivo existir) |
-
-O script instala automaticamente `requirements.txt` e `pyinstaller` antes de executar o build.
-
----
-
-## Funcionalidades
-
-### Seleção de Usuários (Aba 1)
-
-**Objetivo**
-
-Detectar perfis de usuário corporativos na máquina e permitir a seleção de quais serão incluídos no backup.
-
-**Fluxo de Funcionamento**
-
-1. Detecta perfis de usuário no sistema operacional
-2. Exibe lista com checkboxes para seleção
-3. Botão "Selecionar Todos" para marcar todos de uma vez
-4. Botão "Atualizar Usuários" para re-detectar perfis
-5. Exibe contador de usuários selecionados
-
-### Varredura de arquivos
-
-**Objetivo**
-
-Percorrer recursivamente os diretórios selecionados, identificar todos os arquivos elegíveis e calcular métricas de tamanho antes do backup.
-
-**Fluxo de Funcionamento**
-
-1. Para cada caminho da lista de origens, executa `os.walk` recursivo
-2. A cada diretório encontrado, filtra subdiretórios pela lista de exclusões (in-place, evitando descida desnecessária)
-3. Para cada arquivo, verifica exclusão por nome de diretório pai e por extensão
-4. Coleta `path`, `size`, `mtime` e `relative_path` via `os.stat`
-5. Erros de permissão por arquivo são silenciados individualmente
-
-**Regras de Negócio**
-
-- Diretórios não existentes na lista de origens são silenciosamente ignorados
-- A comparação de exclusões é case-insensitive para extensões
-- A filtragem de diretórios é feita modificando `dirs[:]` in-place para evitar descida desnecessária
-- O caminho relativo é calculado em relação ao diretório pai do path de origem, preservando a estrutura de pastas
-
-**Limitações**
-
-- Não segue symlinks
-- Arquivos bloqueados pelo sistema operacional no momento do scan são ignorados sem notificação ao usuário
-
----
-
-### Backup com geração de manifest
-
-**Objetivo**
-
-Copiar os arquivos varridos para um diretório de backup estruturado, calculando SHA-256 de cada arquivo e registrando os metadados em `manifest.json`.
-
-**Fluxo de Funcionamento**
-
-1. Cria subdiretório `Backup_YYYY-MM-DD_HHMMSS/` no destino selecionado
-2. Cria subdiretório `files/` dentro do diretório de backup
-3. Para cada arquivo da lista varrida:
-   - Calcula SHA-256 antes da cópia
-   - Gera nome seguro no formato `<hash8>_<nome_original>` (primeiros 8 caracteres do hash + nome original sanitizado)
-   - Copia o arquivo para `files/` usando `shutil.copy2` (preserva metadados de data/hora)
-   - Registra entrada no manifest com `source`, `backup`, `size`, `sha256` e `mtime`
-4. Ao final, serializa o `manifest.json` na raiz do diretório de backup
-5. Gera relatório em `logs/backup_YYYYMMDD_HHMMSS.json` e `.csv`
-
-**Exemplo de manifest.json gerado:**
-
-```json
-{
-  "backup_date": "2026-01-15T10:30:00.123456",
-  "machine": "WORKSTATION-001",
-  "os": "Windows",
-  "total_files": 3,
-  "total_size": 204800,
-  "files": [
-    {
-      "source": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
-      "backup": "files\\a1b2c3d4_relatorio.pdf",
-      "size": 102400,
-      "sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-      "mtime": "2026-01-14T08:00:00"
-    },
-    {
-      "source": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
-      "backup": "files\\e5f6a1b2_notas.txt",
-      "size": 1024,
-      "sha256": "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
-      "mtime": "2026-01-13T17:45:00"
-    }
-  ]
-}
-```
-
-**Regras de Negócio**
-
-- O SHA-256 é calculado antes da cópia; arquivos onde o hash não pode ser calculado (sem permissão, bloqueados) são registrados como erro e não copiados
-- O nome do arquivo no backup é sempre único: o prefixo de hash previne colisões entre arquivos de mesmo nome em diretórios diferentes
-- O manifest é gerado somente se ao menos um arquivo foi copiado com sucesso
-- A estrutura de backup é criada por execução (um novo diretório com timestamp por operação)
-
-**Limitações**
-
-- Não implementa deduplicação entre execuções distintas de backup
-- O backup é sempre completo (não incremental)
-
----
-
-### Restauração de backup
-
-**Objetivo**
-
-Recuperar arquivos de um backup existente para seus destinos, com verificação de integridade SHA-256 por arquivo e controle de conflitos.
-
-**Fluxo de Funcionamento**
-
-1. Técnico seleciona o diretório de backup (deve conter `manifest.json`)
-2. O manifest é carregado e validado
-3. Técnico seleciona o modo de restauração e a política de conflito
-4. Para cada arquivo a restaurar:
-   - Localiza o arquivo em `files/` usando o campo `backup` do manifest
-   - Calcula SHA-256 do arquivo armazenado
-   - Compara com o hash registrado no manifest; divergência cancela a restauração do arquivo e registra como corrompido
-   - Resolve o caminho de destino conforme o modo selecionado
-   - Aplica a política de conflito se o destino já existir
-   - Copia usando `shutil.copy2`
-5. Gera relatório em `logs/restore_YYYYMMDD_HHMMSS.json` e `.csv`
-
-**Modos de restauração:**
-
-| Modo | Comportamento |
-|---|---|
-| `all` | Restaura todos os arquivos para os caminhos originais registrados no manifest |
-| `selection` | Restaura apenas os arquivos cujo `source` corresponde às pastas selecionadas |
-| `alternate` | Restaura todos os arquivos para um diretório alternativo, preservando apenas o nome do arquivo |
-
-**Políticas de conflito:**
-
-| Política | Comportamento |
-|---|---|
-| `overwrite` | Substitui o arquivo existente sem confirmação |
-| `ask` | Exibe diálogo de confirmação para cada conflito |
-| `ignore` | Mantém o arquivo existente; registra como ignorado |
-
-**Regras de Negócio**
-
-- A verificação de integridade SHA-256 é executada sobre o arquivo no backup antes da cópia
-- Arquivos corrompidos são registrados individualmente; a operação continua para os demais
-- Arquivos ausentes no diretório `files/` são registrados como erro
-- A criação de diretórios de destino é automática (`os.makedirs(..., exist_ok=True)`)
-
-**Limitações**
-
-- O modo `alternate` não preserva a estrutura de subdiretórios da origem
-- Sem suporte a restauração diferencial
-
----
-
-### Detecção de dispositivos de destino
-
-**Objetivo**
-
-Enumerar automaticamente drives externos e de rede disponíveis para uso como destino de backup.
-
-**Fluxo de Funcionamento**
-
-**Windows:**
-1. Obtém o bitmask de drives lógicos via `GetLogicalDrives`
-2. Para cada letra com drive presente, chama `GetDriveTypeW`
-3. Inclui drives removíveis (tipo 2), fixos (tipo 3) e de rede (tipo 4)
-4. Obtém o rótulo via `GetVolumeInformationW`
-
-**Linux:**
-1. Executa `lsblk -o NAME,MOUNTPOINT,LABEL,TYPE --noheadings`
-2. Filtra entradas com ponto de montagem em `/media` ou `/mnt`
-
-**Regras de Negócio**
-
-- O destino pode ser informado manualmente além da seleção automática
-- A validação do destino verifica existência, permissão de escrita e tenta criar o diretório se não existir
-
----
-
-### Extração de usuários do manifest
-
-**Objetivo**
-
-Identificar os nomes de usuário presentes no manifest a partir dos caminhos dos arquivos.
-
-**Fluxo de Funcionamento**
-
-1. Percorre todos os `source` paths do manifest
-2. Para Windows: extrai `parts[2]` de paths com `parts[1] == "users"`
-3. Para Linux: extrai `parts[2]` de paths com `parts[1] == "home"`
-4. Filtra perfis de sistema: `default`, `public`, `all users`, `defaultuser0`, `default user`, `administrator`, `guest`
-5. Retorna lista ordenada de nomes únicos
-
----
-
-### Geração de relatórios
-
-**Objetivo**
-
-Produzir registros auditáveis de cada operação de backup e restauração.
-
-**Relatório de backup (`logs/backup_YYYYMMDD_HHMMSS.json` e `.csv`):**
-
-```json
-{
-  "timestamp": "2026-01-15T10:35:00.000000",
-  "technician": "NOTEBOOK-TECNICO-01",
-  "machine": "WORKSTATION-001",
-  "destination": "E:\\Backups",
-  "backup_dir": "E:\\Backups\\Backup_2026-01-15_103500",
-  "manifest": "E:\\Backups\\Backup_2026-01-15_103500\\manifest.json",
-  "summary": {
-    "total_files_scanned": 1250,
-    "files_copied": 1247,
-    "files_skipped": 0,
-    "files_with_error": 3,
-    "total_size": "4.2 GB",
-    "total_size_bytes": 4509715456
-  },
-  "errors": [
-    {
-      "file": "C:\\Users\\joao.silva\\Documents\\locked.docx",
-      "error": "Sem permissão: [Errno 13] Permission denied"
-    }
-  ],
-  "files": []
-}
-```
-
-**Relatório de restauração (`logs/restore_YYYYMMDD_HHMMSS.json` e `.csv`):**
-
-```json
-{
-  "timestamp": "2026-01-16T09:00:00.000000",
-  "source_machine": "WORKSTATION-001",
-  "backup_date": "2026-01-15T10:30:00.123456",
-  "elapsed_seconds": 42.7,
-  "summary": {
-    "restored": 1245,
-    "skipped": 2,
-    "overwritten": 0,
-    "corrupted": 0,
-    "errors": 0
-  },
-  "details": [
-    {
-      "status": "restored",
-      "source": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
-      "dest": "C:\\Users\\joao.silva\\Documents\\relatorio.pdf",
-      "reason": ""
-    },
-    {
-      "status": "skipped",
-      "source": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
-      "dest": "C:\\Users\\joao.silva\\Desktop\\notas.txt",
-      "reason": "Conflito: arquivo ignorado"
-    }
-  ]
-}
-```
-
----
-
-## Interface do Usuário
-
-A interface é composta por um cabeçalho fixo, um rodapé de navegação e seis abas de conteúdo.
-
-### Cabeçalho
-
-- Exibe o título da aplicação e o hostname da máquina em execução
-- Indica a aba atual e a descrição correspondente
-- Sem truncamento de texto, adapta-se à largura disponível
-
-### Rodapé
-
-Botões "Voltar", "Reiniciar Processo" e "Próximo" para navegação sequencial entre abas.
-
-### Aba 1 — Usuários
-
-- Lista scrollável de perfis de usuário detectados com checkbox por item
-- Botão "Selecionar Todos"
-- Botão "Atualizar Usuários"
-- Contador de usuários selecionados
-
-### Aba 2 — Origens
-
-- Lista scrollável de pastas selecionadas para backup, com botão de remoção individual
-- Botão para adicionar pasta via diálogo do sistema operacional
-- Campo de texto editável com as exclusões ativas (uma por linha)
-
-### Aba 3 — Destino
-
-- Lista scrollável de dispositivos detectados automaticamente com botão "Usar" por item
-- Botão para atualizar a lista de dispositivos
-- Campo de texto livre para informar caminho manualmente (suporta caminhos UNC do Windows e caminhos Linux)
-- Botão "Procurar" para seleção via diálogo
-
-### Aba 4 — Resumo
-
-- Cards com destino, estatísticas, usuários e exclusões
-- Layout adaptativo:
-  - < 1200px: 1 coluna
-  - 1200–2500px: 2 colunas
-  - > 2500px: 4 colunas (ultrawide)
-- Botão "Validar e gerar resumo" / "Atualizar resumo"
-- O scan é executado em thread separada
-
-### Aba 5 — Backup
-
-- Grid de status com usuário atual, arquivo atual e tempo decorrido
-- Barra de progresso proporcional ao total de arquivos
-- Contador `N / Total`
-- Log em tempo real com rolagem automática (CTkTextbox expandido)
-- Botões "Iniciar Backup" e "Cancelar Backup"
-- Status final com contadores de copiados e erros
-
-### Aba 6 — Restaurar
-
-- Campo de seleção da pasta de backup com informações do manifest carregado
-- Seleção de modo de restauração via radio buttons
-- Seleção de política de conflito via radio buttons
-- Campo de destino alternativo (visível somente no modo "Restaurar para outro local")
-- Lista de checkboxes com pastas raiz do manifest (visível somente no modo "Restaurar seleção")
-- Barra de progresso da restauração
-- Log em tempo real (CTkTextbox expandido)
-- Status final com contadores discriminados
-
----
-
-## Processamento Interno
-
-### Threads
-
-Todas as operações longas são executadas em `threading.Thread(daemon=True)` para evitar bloqueio da interface:
-
-- Scan de arquivos
-- Execução do backup
-- Execução da restauração
-
-A comunicação entre a thread de trabalho e a thread da UI é feita exclusivamente via `self.after(0, callback)`, padrão seguro para CustomTkinter/Tkinter.
-
-O modo de conflito `ask` na restauração utiliza `threading.Event` para bloquear a thread de trabalho até que o usuário responda ao diálogo exibido na thread da UI.
-
-### Cancelamento de operações
-
-Um flag booleano (`_stop_flag` para backup, `_restore_stop` para restauração) é verificado no início de cada iteração do loop de arquivos. O cancelamento é cooperativo: o arquivo em processamento no momento do clique em "Parar" é concluído antes da interrupção.
-
-### Cálculo de hash
-
-- **SHA-256:** calculado por `hashlib.sha256` em blocos de 64 KB, utilizado para integridade no manifest e verificação pré-restauração
-- **MD5:** função `calculate_hash` presente em `scanner.py` disponível para uso futuro
-
-### Manipulação de arquivos
-
-- Cópias realizadas por `shutil.copy2`, que preserva metadados de data de modificação e acesso
-- Diretórios de destino criados com `os.makedirs(..., exist_ok=True)`
-- Erros de `PermissionError` e `OSError` são capturados individualmente por arquivo
-
----
-
-## Segurança
-
-### Controle de acesso
-
-A ferramenta não implementa autenticação própria. O controle de acesso é delegado ao sistema operacional: a aplicação deve ser executada com privilégios administrativos para acessar perfis de outros usuários.
-
-### Validações implementadas
-
-- **Destino de backup:** verifica existência, permissão de escrita e tenta criar o diretório antes de iniciar o scan
-- **Manifest na restauração:** verifica existência do arquivo `manifest.json` e valida a estrutura JSON antes de prosseguir
-- **Integridade de arquivos:** SHA-256 calculado e comparado antes de cada restauração; arquivos com divergência são descartados individualmente
-- **Paths de exclusão:** normalizados (barras invertidas/diretas) antes da comparação para evitar falsos negativos cross-platform
-
-### Tratamento de exceções
-
-- `PermissionError` e `OSError` capturados por arquivo em todas as operações de I/O
-- `FileNotFoundError` capturado na leitura do manifest com mensagem de erro exibida na interface
-- Exceções genéricas capturadas na leitura do manifest para evitar crash da aplicação
-
----
-
-## Logs e Auditoria
-
-### Localização
-
-```
-BackupTool/
-└── logs/
-    ├── backup_20260115_103500.json
-    ├── backup_20260115_103500.csv
-    ├── restore_20260116_090000.json
-    └── restore_20260116_090000.csv
-```
-
-O diretório `logs/` é criado automaticamente na primeira operação e fica no mesmo diretório do executável.
-
-### Eventos monitorados
-
-| Evento | Arquivo |
-|---|---|
-| Arquivo copiado no backup | `backup_*.json` e `backup_*.csv` |
-| Erro de cópia no backup | `backup_*.json` (campo `errors`) |
-| Arquivo restaurado | `restore_*.json` e `restore_*.csv` |
-| Arquivo ignorado por conflito | `restore_*.json` e `restore_*.csv` |
-| Arquivo sobrescrito | `restore_*.json` e `restore_*.csv` |
-| Arquivo corrompido (hash divergente) | `restore_*.json` e `restore_*.csv` |
-| Arquivo ausente no backup | `restore_*.json` e `restore_*.csv` |
-
-### Diagnóstico
-
-Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JSON:
-
-```json
-{ "status": "corrupted", "reason": "SHA256 divergente: esperado a1b2c3d4e5f6... obtido 9f8e7d6c5b4a..." }
-{ "status": "error", "reason": "Sem permissão: [Errno 13] Permission denied: 'C:\\...'" }
-```
+## Uso
+
+A interface é organizada como um assistente (wizard) com seis etapas principais, mais duas seções acessíveis pelo cabeçalho:
+
+| # | Etapa | Descrição |
+|---|---|---|
+| 1 | Usuários | Escolha de um ou mais perfis locais para backup |
+| 2 | Origem | Revisão de pastas padrão, pastas extras e exclusões |
+| 3 | Destino | Seleção de onde o backup será salvo (com checagem de espaço livre) |
+| 4 | Resumo | Conferência de usuários, arquivos, tamanho total e destino |
+| 5 | Backup | Execução com progresso em tempo real (por usuário, se multiusuário) |
+| 6 | Restaurar | Validação de um backup e restauração — simples ou corporativa/multiusuário |
+| — | Configurações | Exclusões aplicadas, técnico responsável, domínio NetBIOS |
+| — | Logs | Histórico de relatórios de backup/restauração gerados |
+
+O técnico pode voltar livremente para qualquer etapa já visitada clicando no stepper superior.
 
 ---
 
 ## Tratamento de Erros
 
-| Situação | Tratamento |
+| Cenário | Comportamento |
 |---|---|
 | Arquivo sem permissão de leitura no scan | Silenciado; arquivo não incluído na lista |
 | Arquivo sem permissão para cálculo de SHA-256 | Registrado como erro; arquivo não copiado |
@@ -733,6 +343,10 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 | Arquivo do backup ausente em disco | Registrado como erro no relatório de restauração |
 | Hash divergente na restauração | Arquivo marcado como corrompido; não restaurado |
 | Destino sem permissão de escrita | Validação pré-operação; mensagem de erro exibida |
+| `CreateProfile` retorna `E_ACCESSDENIED` | Perfil não criado; cai para destino heurístico com warning no relatório |
+| `CreateProfile` retorna `ERROR_ALREADY_EXISTS` | Path já registrado é lido do `ProfileList`; restauração segue normalmente |
+| SID não resolvido (usuário/domínio inexistente) | `ProfileError`; cai para destino heurístico com warning no relatório |
+| Executando fora do Windows ou sem admin | Etapa de `CreateProfile` é pulada silenciosamente; destino heurístico é usado |
 | Usuário cancela operação | Flag cooperativo; arquivo em andamento é concluído |
 
 ---
@@ -745,22 +359,23 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 |---|---|
 | CPU | Qualquer dual-core |
 | RAM | 256 MB disponíveis |
-| Disco (executável) | Aproximadamente 30–60 MB (estimativa PyInstaller) |
+| Disco (executável) | Estimativa maior que a versão CustomTkinter devido ao PySide6/Qt (dezenas de MB a mais) |
 | Python | 3.11+ (apenas para execução via fonte) |
-| Resolução | 1366x768 |
 
 ### Limitações identificadas
 
-- O backup é sempre completo, sem suporte a modo incremental ou diferencial
-- O cálculo de SHA-256 durante o backup aumenta o tempo total proporcional ao volume de dados
-- O modo `alternate` na restauração não reconstrói a estrutura de subdiretórios
+- **Backup incremental e compressão ZIP têm motor pronto em `core/backup.py` e `core/compression.py`, mas nenhuma página da UI expõe essas opções** — hoje todo backup disparado pela interface é completo (`backup_type="full"`) e sem compressão
+- **Cliente SFTP (`core/sftp.py`) não está conectado a nenhuma página da UI** — hoje o único destino suportado pela interface é um caminho local/de rede mapeado
+- **`build.py` ainda referencia a stack antiga** (`--hidden-import=customtkinter`) e não foi atualizado para PySide6; um build gerado com o script atual tende a falhar ou ficar incompleto até esse ajuste
+- O modo `alternate` na restauração simples não reconstrói a estrutura de subdiretórios
 - A detecção de drives no Linux depende de `lsblk`; ambientes sem `util-linux` podem não detectar dispositivos automaticamente
-- Não há controle de espaço em disco disponível no destino antes de iniciar o backup
+- `CreateProfile`/resolução de SID dependem de a estação estar corretamente ingressada no domínio e de o controlador de domínio estar acessível; em cenários offline, a restauração cai para o destino heurístico
 
 ### Boas práticas de utilização
 
-- Executar sempre com privilégios de administrador para garantir acesso a todos os perfis
-- Verificar espaço disponível no destino antes de iniciar o backup
+- Executar sempre como Administrador/root para garantir acesso a todos os perfis e, no Windows, permitir a criação de perfil via `CreateProfile`
+- Verificar espaço disponível no destino antes de iniciar o backup (a interface já sinaliza isso na etapa Destino)
+- Preencher o domínio NetBIOS em Configurações sempre que a máquina de destino estiver ingressada em AD
 - Manter o diretório `logs/` para fins de auditoria após cada operação
 
 ---
@@ -769,9 +384,29 @@ Para identificar arquivos com falha, filtrar o campo `status` nos relatórios JS
 
 ### Estratégia de testes identificada
 
-Não há framework de testes automatizados presente no repositório. Os testes identificados são scripts de validação ad hoc executados diretamente pelo interpretador Python.
+Suíte automatizada com `pytest` em `tests/`, cobrindo os módulos `core/backup.py`, `core/compression.py` e `core/manifest.py`.
 
-### Cenários validados
+### Como executar
+
+```bash
+cd BackupTool
+pip install -r requirements.txt
+pytest
+```
+
+### Cobertura atual e lacunas conhecidas
+
+| Módulo | Coberto por teste automatizado? |
+|---|---|
+| `core/backup.py` | Sim (`tests/test_backup.py`) |
+| `core/compression.py` | Sim (`tests/test_compression.py`) |
+| `core/manifest.py` | Sim (`tests/test_manifest.py`) |
+| `core/restore.py` (restauração simples e corporativa) | Não |
+| `core/win_profile.py` (`CreateProfile`, resolução de SID) | Não — depende de Windows/AD real; recomenda-se mock de `ctypes.WinDLL`/`ctypes.windll.userenv` |
+| `core/profiles.py`, `core/destinations.py`, `core/sftp.py`, `core/scanner.py` | Não |
+| `ui/` (páginas, workers) | Não |
+
+### Cenários validados manualmente
 
 | Cenário | Resultado esperado |
 |---|---|
@@ -781,23 +416,11 @@ Não há framework de testes automatizados presente no repositório. Os testes i
 | Restauração para destino alternativo | `restored == 1`, `errors == 0` |
 | Conflito com política `ignore` | `skipped == 1` |
 | Detecção de arquivo corrompido | `corrupted == 1`, arquivo não restaurado |
-| Geração de relatório JSON e CSV | Arquivos criados com sucesso |
-| Responsividade em 1366x768 | Nenhum componente cortado |
-| Responsividade em 4K | Tudo legível, sem fontes pequenas |
-| Responsividade em ultrawide | Layout com até 4 colunas no resumo |
-
-### Como executar validações manuais
-
-```bash
-cd BackupTool
-
-python -c "
-from core.manifest import make_manifest, save_manifest, load_manifest, sha256_file, ManifestEntry
-from core.restore import run_restore, generate_restore_report
-from core.backup import run_backup
-print('Imports OK')
-"
-```
+| Geração de relatório JSON, CSV e HTML | Arquivos criados com sucesso |
+| Restauração corporativa sem domínio (grupo de trabalho) | Destino heurístico `C:\Users\usuario`, sem chamada a `CreateProfile` |
+| Restauração corporativa com domínio, perfil inexistente | `CreateProfile` cria o perfil; destino passa a ser o `ProfileImagePath` retornado |
+| Restauração corporativa com domínio, perfil já existente | `ERROR_ALREADY_EXISTS`; path lido do `ProfileList` |
+| Restauração corporativa sem privilégio de Administrador | `ProfileError`; fallback heurístico com warning no relatório |
 
 ---
 
@@ -806,7 +429,7 @@ print('Imports OK')
 ### Atualização de dependências
 
 ```bash
-pip install --upgrade customtkinter
+pip install --upgrade PySide6 paramiko pytest
 pip freeze > requirements.txt
 ```
 
@@ -820,10 +443,21 @@ Editar `DEFAULT_EXCLUSIONS` ou `DEFAULT_EXCLUDED_EXTENSIONS` em `config/defaults
 
 ### Adição de novo modo de restauração
 
-1. Implementar a lógica de resolução de destino em `core/restore.py`, função `_resolve_dest`
-2. Adicionar o novo valor ao parâmetro `mode` de `run_restore`
-3. Adicionar o radio button correspondente em `_build_tab_restaurar` em `main.py`
-4. Tratar o novo modo em `_start_restore` em `main.py`
+1. Implementar a lógica de resolução de destino em `core/restore.py` (`_resolve_dest` para restauração simples, ou `_profile_relative_path`/`CorporateRestorePlan` para corporativa)
+2. Expor o novo modo/parâmetro no worker correspondente em `ui/workers.py`
+3. Adicionar o controle correspondente em `ui/pages/restore_page.py`
+
+### Exposição do backup incremental/compressão/SFTP na UI (pendente)
+
+O motor já existe em `core/backup.py`, `core/compression.py` e `core/sftp.py`. Para expor:
+
+1. Adicionar os controles (toggle de incremental, nível de compressão, destino SFTP) em `ui/pages/backup_page.py` / `ui/pages/destination_page.py`
+2. Persistir as escolhas em `ui/state.py` (`AppState`)
+3. Repassar os novos parâmetros em `BackupWorker.run()` (`ui/workers.py`) para `run_backup`/`run_multi_user_backup`
+
+### Correção do `build.py` para PySide6 (pendente)
+
+Substituir `--hidden-import=customtkinter` pelos hidden imports relevantes do PySide6 (tipicamente não são necessários manualmente, mas pode ser preciso `--add-data` para `resources/` e `styles/`) e validar o build em uma máquina limpa antes de distribuir.
 
 ### Regeneração do executável
 
@@ -831,7 +465,7 @@ Editar `DEFAULT_EXCLUSIONS` ou `DEFAULT_EXCLUDED_EXTENSIONS` em `config/defaults
 python build.py
 ```
 
-O executável deve ser regenerado após qualquer alteração no código-fonte ou nas dependências.
+O executável deve ser regenerado após qualquer alteração no código-fonte ou nas dependências. **Atenção:** ver limitação acima sobre `build.py` desatualizado.
 
 ---
 
@@ -839,15 +473,16 @@ O executável deve ser regenerado após qualquer alteração no código-fonte ou
 
 | Prioridade | Melhoria |
 |---|---|
-| Alta | Verificação de espaço disponível no destino antes de iniciar o backup |
-| Alta | Suporte a backup incremental utilizando o manifest como referência de estado anterior |
-| Alta | Mapeamento de perfis de usuário entre máquinas na tela de restauração |
-| Média | Seleção de múltiplos perfis de usuário na tela de origem |
-| Média | Exportação do relatório para o destino do backup junto com o manifest |
-| Média | Suporte a destino via SSH/SFTP |
+| Alta | Expor backup incremental na interface (motor já implementado em `core/backup.py`) |
+| Alta | Expor compressão ZIP opcional na interface (motor já implementado em `core/compression.py`) |
+| Alta | Atualizar `build.py` para gerar o executável corretamente com PySide6 |
+| Alta | Testes automatizados para `core/restore.py` (simples e corporativa) e `core/win_profile.py` (com mocks de `ctypes`) |
+| Média | Expor destino SFTP na interface (cliente já implementado em `core/sftp.py`) |
+| Média | Exportação do relatório HTML já gerado para o destino do backup, junto com o manifest |
+| Média | Verificação prévia de conectividade com o domínio antes de tentar `CreateProfile`, com aviso antecipado na UI |
 | Baixa | Adição de ícone e metadados de versão no executável Windows |
-| Baixa | Framework de testes automatizados (pytest) cobrindo os módulos `core/` |
-| Baixa | Histórico de backups: exibição de execuções anteriores na aba de restauração |
+| Baixa | Histórico de backups: exibição de execuções anteriores na página Restaurar a partir de `list_backups` |
+| Baixa | Reconstrução de subdiretórios no modo `alternate` da restauração simples |
 
 ---
 
@@ -862,24 +497,26 @@ python -m venv .venv
 source .venv/bin/activate  # Linux
 .venv\Scripts\activate     # Windows
 pip install -r requirements.txt
+pytest  # roda a suíte antes de começar a alterar
 ```
 
 ### Convenções de código
 
 - Python 3.11+ com type hints em todas as funções públicas
-- Módulos de domínio em `core/` não devem importar de `main.py`
-- `main.py` não deve conter lógica de domínio; apenas orquestração da UI
-- Operações de I/O longas devem ser executadas em `threading.Thread(daemon=True)`
-- Comunicação thread → UI exclusivamente via `self.after(0, callback)`
+- Módulos de domínio em `core/` não devem importar de `ui/` nem de `main.py`
+- `ui/` não deve conter lógica de negócio; apenas orquestração e apresentação
+- Operações de I/O longas devem ser executadas em `QThread` (ver `ui/workers.py`), nunca bloqueando a thread principal
+- Comunicação thread → UI exclusivamente via `Signal`/`Slot` do Qt
 - Erros de arquivo devem ser capturados individualmente sem interromper o loop de processamento
-- Componentes de UI responsivos: usar `sticky="ew"` ou `sticky="nsew"`, evitar `width`/`height` fixos
+- Chamadas a Windows API via `ctypes` devem checar `SYSTEM != "Windows"` antes de executar e tratar falhas com exceções de domínio (`ProfileError`), nunca deixando `ctypes` propagar erro cru para a UI
 
 ### Checklist para novos módulos em `core/`
 
-- [ ] Módulo independente de CustomTkinter e Tkinter
+- [ ] Módulo independente de PySide6/Qt
 - [ ] Exceções de I/O tratadas por arquivo
 - [ ] Funções públicas com type hints
 - [ ] Docstring descrevendo o propósito do módulo
+- [ ] Teste em `tests/` cobrindo o caminho feliz e ao menos um caso de erro
 
 ---
 
@@ -891,21 +528,21 @@ Recomenda-se adotar o padrão **Semantic Versioning (SemVer)** conforme `MAJOR.M
 |---|---|
 | `MAJOR` | Quebra de compatibilidade no formato do `manifest.json` ou mudança estrutural na interface |
 | `MINOR` | Adição de novo modo de restauração, novo destino suportado ou nova funcionalidade retrocompatível |
-| `PATCH` | Correção de bugs, ajuste de exclusões padrão, atualização de dependências, melhorias de responsividade |
+| `PATCH` | Correção de bugs, ajuste de exclusões padrão, atualização de dependências |
 
-Versão atual: `1.1.0`
+Versão atual: `2.0.0` (migração da interface para PySide6 e adição de restauração corporativa multiusuário com suporte a domínio — mudanças estruturais em relação à `1.1.0`)
 
 ---
 
 ## Licença
 
-Licença não identificada.
+GNU General Public License v3.0 — ver [`LICENSE`](./LICENSE).
 
 ---
 
 ## Autor
 
-Não identificado no código-fonte.
+Não identificado no código-fonte. `app.setOrganizationName("Santa Casa da Bahia")` em `main.py` indica a organização para a qual a ferramenta foi desenvolvida.
 
 ---
 
@@ -913,16 +550,16 @@ Não identificado no código-fonte.
 
 | Versão | Data | Alterações |
 |---|---|---|
-| 1.1.0 | 2026-07 | Interface responsiva completa, DPI awareness moderna, sistema de fontes dinâmicas, layout ultrawide, 6 abas organizadas |
+| 2.0.0 | 2026-08 | Migração completa da UI para PySide6; backup e restauração multiusuário; restauração corporativa com mapeamento de perfis e suporte a domínio via `CreateProfile`; verificação de espaço em disco; motores de backup incremental, compressão ZIP e SFTP adicionados a `core/` (ainda não expostos na UI); suíte de testes com `pytest` |
+| 1.1.0 | 2026-07 | Interface responsiva completa, DPI awareness moderna, sistema de fontes dinâmicas, layout ultrawide, 6 abas organizadas (CustomTkinter) |
 | 1.0.0 | 2026-06 | Versão inicial: backup com manifest, restauração com verificação SHA-256, interface com 5 abas, empacotamento via PyInstaller |
 
 ---
 
 ## Observações Técnicas
 
-- O campo `technician` nos relatórios de backup é populado com o hostname da máquina onde a ferramenta é executada (`socket.gethostname()`), não com o nome do técnico
-- A função `calculate_hash` em `core/scanner.py` utiliza MD5 e está presente no módulo mas não é chamada no fluxo principal; o hash efetivo utilizado é SHA-256 via `core/manifest.py`
-- O módulo `core/destinations.py` referencia `shutil.disk_usage()` no branch Windows sem declaração de `import shutil` no topo do arquivo; isso pode gerar `NameError` em execução no Windows
-- O modo de restauração `domain` está definido na assinatura de `run_restore` com o parâmetro `user_mapping`, mas a lógica de reescrita de path e a entrada correspondente na interface gráfica ainda não estão implementadas na versão atual
+- O campo `technician` nos relatórios de backup é populado por padrão com o hostname da máquina onde a ferramenta é executada (`socket.gethostname()`), mas agora é editável na página Configurações
 - A verificação de integridade SHA-256 na restauração é executada sobre o arquivo armazenado no backup, não sobre o arquivo de origem original
 - O formato de nome dos arquivos no backup (`<hash8>_<nome>`) usa apenas os primeiros 8 caracteres do SHA-256 como prefixo; colisões de prefixo são teoricamente possíveis, embora extremamente improváveis em volumes típicos
+- `core/restore.py` processa paths de origem Windows (`ntpath`) mesmo quando executado em Linux, para permitir inspecionar/restaurar backups feitos em máquinas Windows a partir de uma estação Linux
+- A criação de perfil via `CreateProfile` exige privilégio de Administrador local; sem ele, `core/win_profile.py` levanta `ProfileError` antes mesmo de tentar a chamada à API, e a restauração corporativa cai para o destino heurístico sem travar a operação
