@@ -20,8 +20,13 @@ import shutil
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QMessageBox
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QMessageBox,
+    QRadioButton, QButtonGroup, QComboBox, QLineEdit, QFileDialog,
+)
 
+from core.backup import find_latest_backup
+from core.compression import CompressionLevel
 from core.destinations import validate_destination
 from core.scanner import human_size, total_size
 from styles import dark_theme as theme
@@ -30,7 +35,13 @@ from ui.format_utils import format_duration, estimate_remaining, short_path, fri
 from ui.os_utils import open_path
 from ui.state import AppState
 from ui.widgets import Card, SectionIntro, SuccessButton, DangerButton, SecondaryButton, MetricTile
-from ui.workers import BackupWorker
+from ui.workers import BackupWorker, SftpUploadWorker
+
+COMPRESSION_OPTIONS = [
+    ("Sem compressão (mais rápido)", CompressionLevel.NONE),
+    ("Padrão", CompressionLevel.STANDARD),
+    ("Máxima compressão (mais lento, arquivo menor)", CompressionLevel.MAXIMUM),
+]
 
 
 class BackupPage(QWidget):
@@ -44,6 +55,7 @@ class BackupPage(QWidget):
         self.logs_dir = logs_dir
         os.makedirs(self.logs_dir, exist_ok=True)
         self._worker: BackupWorker | None = None
+        self._sftp_worker: SftpUploadWorker | None = None
         self._started_at = 0.0
 
         root = QVBoxLayout(self)
@@ -54,6 +66,53 @@ class BackupPage(QWidget):
             "Execução do backup",
             "Acompanhe usuário atual, arquivo processado, progresso e tempo estimado restante.",
         ))
+
+        # ── Opções de backup (tipo + compressão) ──
+        options_card = Card("Opções de Backup")
+
+        type_row = QHBoxLayout()
+        type_row.addWidget(QLabel("Tipo:"))
+        self.radio_full = QRadioButton("Completo")
+        self.radio_incremental = QRadioButton("Incremental (apenas arquivos novos/modificados)")
+        self.radio_full.setChecked(self.state.backup_type != "incremental")
+        self.radio_incremental.setChecked(self.state.backup_type == "incremental")
+        self.backup_type_group = QButtonGroup(self)
+        self.backup_type_group.addButton(self.radio_full)
+        self.backup_type_group.addButton(self.radio_incremental)
+        self.radio_full.toggled.connect(self._on_backup_type_changed)
+        type_row.addWidget(self.radio_full)
+        type_row.addWidget(self.radio_incremental)
+        type_row.addStretch(1)
+        options_card.body_layout().addLayout(type_row)
+
+        prev_row = QHBoxLayout()
+        prev_row.addWidget(QLabel("Backup anterior (base para o incremental):"))
+        self.prev_backup_entry = QLineEdit(self.state.previous_backup_dir)
+        self.prev_backup_entry.setPlaceholderText("Detectado automaticamente ao selecionar Incremental")
+        self.prev_backup_entry.textChanged.connect(self._on_prev_backup_changed)
+        btn_browse_prev = SecondaryButton("Procurar")
+        btn_browse_prev.clicked.connect(self._browse_previous_backup)
+        prev_row.addWidget(self.prev_backup_entry, 1)
+        prev_row.addWidget(btn_browse_prev)
+        options_card.body_layout().addLayout(prev_row)
+        self.prev_row_widgets = [self.prev_backup_entry, btn_browse_prev]
+
+        comp_row = QHBoxLayout()
+        comp_row.addWidget(QLabel("Compressão do backup (ZIP):"))
+        self.combo_compression = QComboBox()
+        for label, _level in COMPRESSION_OPTIONS:
+            self.combo_compression.addItem(label)
+        current_index = next(
+            (i for i, (_l, level) in enumerate(COMPRESSION_OPTIONS) if level == self.state.compression_level),
+            0,
+        )
+        self.combo_compression.setCurrentIndex(current_index)
+        self.combo_compression.currentIndexChanged.connect(self._on_compression_changed)
+        comp_row.addWidget(self.combo_compression, 1)
+        options_card.body_layout().addLayout(comp_row)
+
+        root.addWidget(options_card)
+        self._on_backup_type_changed()
 
         status_card = Card("Monitoramento de Cópia")
         tiles = QGridLayout()
@@ -93,6 +152,18 @@ class BackupPage(QWidget):
         self.btn_view_logs = btn_view_logs
         root.addWidget(log_card)
 
+        # ── Status do envio remoto via SFTP (visível apenas quando habilitado) ──
+        self.sftp_card = Card("Envio remoto (SFTP)")
+        self.lbl_sftp_progress = QLabel("Aguardando conclusão do backup local...")
+        self.lbl_sftp_progress.setObjectName("Muted")
+        self.lbl_sftp_progress.setWordWrap(True)
+        self.sftp_card.body_layout().addWidget(self.lbl_sftp_progress)
+        self.sftp_progressbar = QProgressBar()
+        self.sftp_progressbar.setValue(0)
+        self.sftp_card.body_layout().addWidget(self.sftp_progressbar)
+        self.sftp_card.setVisible(False)
+        root.addWidget(self.sftp_card)
+
         btn_row = QHBoxLayout()
         self.btn_start = SuccessButton("Iniciar Backup")
         self.btn_start.clicked.connect(self._start_backup)
@@ -113,6 +184,29 @@ class BackupPage(QWidget):
         root.addLayout(btn_row)
         root.addStretch(1)
 
+    # ── opções de backup ──
+    def _on_backup_type_changed(self):
+        incremental = self.radio_incremental.isChecked()
+        self.state.backup_type = "incremental" if incremental else "full"
+        for widget in self.prev_row_widgets:
+            widget.setEnabled(incremental)
+        if incremental and not self.prev_backup_entry.text().strip() and self.state.destination:
+            latest = find_latest_backup(self.state.destination)
+            if latest:
+                self.prev_backup_entry.setText(latest)
+
+    def _on_prev_backup_changed(self, text: str):
+        self.state.previous_backup_dir = text.strip()
+
+    def _browse_previous_backup(self):
+        start_dir = self.state.destination or ""
+        path = QFileDialog.getExistingDirectory(self, "Selecionar backup anterior", start_dir)
+        if path:
+            self.prev_backup_entry.setText(path)
+
+    def _on_compression_changed(self, index: int):
+        self.state.compression_level = COMPRESSION_OPTIONS[index][1]
+
     # ── início / parada ──
     def _start_backup(self):
         if not self.state.scanned:
@@ -121,6 +215,28 @@ class BackupPage(QWidget):
             return
         if not self._validate_ready():
             return
+
+        if self.state.backup_type == "incremental" and not self.state.previous_backup_dir:
+            QMessageBox.information(
+                self, "Nenhum backup anterior encontrado",
+                "Nenhum backup anterior foi localizado no destino selecionado. "
+                "Este backup será executado como completo.",
+            )
+            self.state.backup_type = "full"
+            self.radio_full.setChecked(True)
+
+        if self.state.sftp_enabled and not self.state.sftp_host:
+            QMessageBox.warning(
+                self, "SFTP incompleto",
+                "O envio por SFTP está habilitado na página Destino, mas o host não foi "
+                "preenchido. Preencha os dados de SFTP ou desmarque a opção antes de continuar.",
+            )
+            return
+
+        self.sftp_card.setVisible(self.state.sftp_enabled)
+        if self.state.sftp_enabled:
+            self.lbl_sftp_progress.setText("Aguardando conclusão do backup local...")
+            self.sftp_progressbar.setValue(0)
 
         self._started_at = time.time()
         self.btn_start.setEnabled(False)
@@ -142,6 +258,8 @@ class BackupPage(QWidget):
     def _stop_backup(self):
         if self._worker:
             self._worker.request_stop()
+        if self._sftp_worker:
+            self._sftp_worker.request_stop()
         self.btn_stop.setEnabled(False)
 
     def _validate_ready(self) -> bool:
@@ -220,7 +338,52 @@ class BackupPage(QWidget):
                 user_prefix = f"{err.get('user', '')} " if err.get("user") else ""
                 self.log_message.emit(f"  {user_prefix}{err['file']}: {err['error']}\n")
 
+        if getattr(result, "compressed_path", "") and result.compressed_size:
+            saved_pct = 100 - (result.compressed_size / result.original_size * 100) if result.original_size else 0
+            comp_msg = (
+                f"Compressão: {human_size(result.original_size)} → {human_size(result.compressed_size)} "
+                f"({saved_pct:.0f}% menor) — {result.compressed_path}"
+            )
+            self.log_message.emit(comp_msg + "\n")
+
         self.backup_finished.emit(result.errors == 0)
+
+        if self.state.sftp_enabled:
+            self._start_sftp_upload(result)
+
+    # ── envio remoto via SFTP ──
+    def _start_sftp_upload(self, result):
+        local_path = getattr(result, "compressed_path", "") or result.backup_dir
+        if not local_path or not os.path.exists(local_path):
+            self.lbl_sftp_progress.setText("Nada para enviar: caminho local do backup não encontrado.")
+            return
+
+        self.sftp_card.setVisible(True)
+        self.sftp_progressbar.setValue(0)
+        self.lbl_sftp_progress.setText(f"Enviando {short_path(local_path)} para {self.state.sftp_host}...")
+        self.log_message.emit(f"\n── Envio SFTP ──\nEnviando para {self.state.sftp_host}:{self.state.sftp_remote_path or '.'}\n")
+
+        self._sftp_worker = SftpUploadWorker(self.state, local_path)
+        self._sftp_worker.progress.connect(self._on_sftp_progress)
+        self._sftp_worker.finished_ok.connect(self._on_sftp_upload_ok)
+        self._sftp_worker.failed.connect(self._on_sftp_upload_failed)
+        self._sftp_worker.start()
+
+    def _on_sftp_progress(self, i: int, total: int, relative_path: str):
+        pct = int((i / total) * 100) if total else 0
+        self.sftp_progressbar.setValue(pct)
+        self.lbl_sftp_progress.setText(f"Enviando ({i}/{total}): {relative_path}")
+
+    def _on_sftp_upload_ok(self, message: str):
+        self.sftp_progressbar.setValue(100)
+        self.lbl_sftp_progress.setText(f"{icon_html('check', color=theme.SUCCESS)} {message}")
+        self.state.last_sftp_status = message
+        self.log_message.emit(message + "\n")
+
+    def _on_sftp_upload_failed(self, message: str):
+        self.lbl_sftp_progress.setText(f"{icon_html('warning', color=theme.WARNING)} Falha no envio SFTP: {message}")
+        self.state.last_sftp_status = f"Falha: {message}"
+        self.log_message.emit(f"Falha no envio SFTP: {message}\n")
 
     def _on_finished_single(self, result, report_path: str):
         extra = []

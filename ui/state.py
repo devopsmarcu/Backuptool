@@ -19,6 +19,7 @@ from typing import Optional
 from config.defaults import get_default_paths, DEFAULT_EXCLUSIONS, DEFAULT_EXCLUDED_EXTENSIONS
 from core.manifest import Manifest
 from core.profiles import UserProfile
+from core.compression import CompressionLevel
 
 
 @dataclass
@@ -51,6 +52,21 @@ class AppState:
     # Sessão
     technician: str = field(default_factory=socket.gethostname)
     domain_netbios: str = ""
+
+    # Opções de backup (tipo e compressão)
+    backup_type: str = "full"  # "full" | "incremental"
+    previous_backup_dir: str = ""  # base para comparação quando backup_type == "incremental"
+    compression_level: CompressionLevel = CompressionLevel.NONE
+
+    # Envio remoto via SFTP (opcional, executado após o backup local)
+    sftp_enabled: bool = False
+    sftp_host: str = ""
+    sftp_port: int = 22
+    sftp_username: str = ""
+    sftp_password: str = ""
+    sftp_private_key_path: str = ""
+    sftp_remote_path: str = ""
+    last_sftp_status: str = ""
 
     def reset_for_new_run(self):
         """Equivalente ao antigo `_restart_process` (apenas o estado, sem UI)."""

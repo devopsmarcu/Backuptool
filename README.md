@@ -20,14 +20,13 @@ O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de format
 - **Backup multiusuário**: seleção de múltiplos perfis detectados na máquina (`core/profiles.py`) em uma única execução, com relatório consolidado por usuário
 - **Restauração corporativa (multiusuário) com mapeamento de perfis**: a partir de um backup contendo vários usuários, cada um pode ser restaurado para um usuário de destino diferente (`auto_map_users`, mapeamento manual)
 - **Suporte a domínio Active Directory na restauração**: quando o perfil de destino ainda não existe na máquina (ex.: reinstalação limpa ingressada no domínio), o BackupTool chama a API `CreateProfile` do Windows (`core/win_profile.py`) para registrar o perfil corretamente no `ProfileList` do registro antes de copiar os arquivos, evitando o problema clássico de perfis "soltos" fora do SID correto
-- **Backup incremental (motor pronto)**: `core/backup.py` já é capaz de comparar contra um manifest anterior e classificar arquivos em novos/modificados/inalterados (`analyze_incremental`)
-- **Compressão ZIP opcional (motor pronto)**: `core/compression.py` permite compactar o diretório de backup com níveis configuráveis
-- **Cliente SFTP (motor pronto)**: `core/sftp.py` (via `paramiko`) permite enviar/baixar arquivos para um destino remoto
+- **Backup incremental**: disponível na página Backup (opção "Incremental"), compara contra o último backup no destino (detectado automaticamente via `find_latest_backup`, ou selecionado manualmente) e copia apenas arquivos novos/modificados
+- **Compressão ZIP opcional**: seletor de nível de compressão (Nenhuma / Padrão / Máxima) na página Backup, aplicado ao final da cópia local
+- **Envio remoto via SFTP**: configurável na página Destino (host, porta, usuário, senha ou chave privada, pasta remota, com botão de teste de conexão); quando habilitado, o resultado do backup (ZIP compactado ou a pasta inteira) é enviado automaticamente ao servidor remoto após a conclusão do backup local
 - **Verificação de espaço em disco**: `core/destinations.py` valida espaço livre no destino antes da operação
 - **Relatórios em HTML, além de JSON/CSV**: `core/report.py` gera relatório navegável em HTML para backups e restaurações
 - **Suíte de testes com `pytest`**: `tests/` cobre backup, compressão e manifest
-
-> Os itens marcados como "motor pronto" existem e são testáveis em `core/`, mas ainda não possuem controle correspondente na interface gráfica — veja [Limitações](#desempenho-e-limitações).
+- **Correção de estabilidade**: nomes de pastas de backup agora incluem milissegundos e um sufixo de desempate, evitando colisão de nome ao rodar dois backups em sequência muito rápida (ex.: full seguido de incremental)
 
 ---
 
@@ -320,9 +319,9 @@ A interface é organizada como um assistente (wizard) com seis etapas principais
 |---|---|---|
 | 1 | Usuários | Escolha de um ou mais perfis locais para backup |
 | 2 | Origem | Revisão de pastas padrão, pastas extras e exclusões |
-| 3 | Destino | Seleção de onde o backup será salvo (com checagem de espaço livre) |
+| 3 | Destino | Seleção de onde o backup será salvo (com checagem de espaço livre); configuração opcional de envio remoto via SFTP |
 | 4 | Resumo | Conferência de usuários, arquivos, tamanho total e destino |
-| 5 | Backup | Execução com progresso em tempo real (por usuário, se multiusuário) |
+| 5 | Backup | Execução com progresso em tempo real (por usuário, se multiusuário); opções de tipo (completo/incremental) e compressão; status de envio SFTP quando habilitado |
 | 6 | Restaurar | Validação de um backup e restauração — simples ou corporativa/multiusuário |
 | — | Configurações | Exclusões aplicadas, técnico responsável, domínio NetBIOS |
 | — | Logs | Histórico de relatórios de backup/restauração gerados |
@@ -364,12 +363,12 @@ O técnico pode voltar livremente para qualquer etapa já visitada clicando no s
 
 ### Limitações identificadas
 
-- **Backup incremental e compressão ZIP têm motor pronto em `core/backup.py` e `core/compression.py`, mas nenhuma página da UI expõe essas opções** — hoje todo backup disparado pela interface é completo (`backup_type="full"`) e sem compressão
-- **Cliente SFTP (`core/sftp.py`) não está conectado a nenhuma página da UI** — hoje o único destino suportado pela interface é um caminho local/de rede mapeado
 - **`build.py` ainda referencia a stack antiga** (`--hidden-import=customtkinter`) e não foi atualizado para PySide6; um build gerado com o script atual tende a falhar ou ficar incompleto até esse ajuste
 - O modo `alternate` na restauração simples não reconstrói a estrutura de subdiretórios
 - A detecção de drives no Linux depende de `lsblk`; ambientes sem `util-linux` podem não detectar dispositivos automaticamente
 - `CreateProfile`/resolução de SID dependem de a estação estar corretamente ingressada no domínio e de o controlador de domínio estar acessível; em cenários offline, a restauração cai para o destino heurístico
+- O cliente SFTP (`core/sftp.py`) usa `RejectPolicy` para host keys desconhecidas: se o host de destino não estiver em um arquivo `known_hosts` já confiável na máquina, a conexão falha por segurança. Isso é intencional (evita MITM), mas gera uma mensagem genérica de falha na UI — vale revisar caso o técnico relate "não foi possível conectar" mesmo com credenciais corretas
+- O envio via SFTP é sequencial, arquivo por arquivo, sem paralelismo; backups muito grandes podem demorar para transferir
 
 ### Boas práticas de utilização
 
@@ -447,13 +446,14 @@ Editar `DEFAULT_EXCLUSIONS` ou `DEFAULT_EXCLUDED_EXTENSIONS` em `config/defaults
 2. Expor o novo modo/parâmetro no worker correspondente em `ui/workers.py`
 3. Adicionar o controle correspondente em `ui/pages/restore_page.py`
 
-### Exposição do backup incremental/compressão/SFTP na UI (pendente)
+### Exposição na UI (concluída)
 
-O motor já existe em `core/backup.py`, `core/compression.py` e `core/sftp.py`. Para expor:
+Backup incremental, compressão ZIP e envio via SFTP já estão disponíveis na interface:
 
-1. Adicionar os controles (toggle de incremental, nível de compressão, destino SFTP) em `ui/pages/backup_page.py` / `ui/pages/destination_page.py`
-2. Persistir as escolhas em `ui/state.py` (`AppState`)
-3. Repassar os novos parâmetros em `BackupWorker.run()` (`ui/workers.py`) para `run_backup`/`run_multi_user_backup`
+- Backup incremental e nível de compressão: página **Backup**, card "Opções de Backup"
+- Envio via SFTP: página **Destino**, card "Envio remoto via SFTP (opcional)"
+
+Os parâmetros escolhidos ficam em `ui/state.py` (`AppState.backup_type`, `previous_backup_dir`, `compression_level`, `sftp_*`) e são repassados por `ui/workers.py` (`BackupWorker`, `SftpTestWorker`, `SftpUploadWorker`) para `core/backup.py` e `core/sftp.py`.
 
 ### Correção do `build.py` para PySide6 (pendente)
 
@@ -473,16 +473,15 @@ O executável deve ser regenerado após qualquer alteração no código-fonte ou
 
 | Prioridade | Melhoria |
 |---|---|
-| Alta | Expor backup incremental na interface (motor já implementado em `core/backup.py`) |
-| Alta | Expor compressão ZIP opcional na interface (motor já implementado em `core/compression.py`) |
 | Alta | Atualizar `build.py` para gerar o executável corretamente com PySide6 |
-| Alta | Testes automatizados para `core/restore.py` (simples e corporativa) e `core/win_profile.py` (com mocks de `ctypes`) |
-| Média | Expor destino SFTP na interface (cliente já implementado em `core/sftp.py`) |
+| Alta | Testes automatizados para `core/restore.py` (simples e corporativa), `core/win_profile.py` e `core/sftp.py` (com mocks de `ctypes`/`paramiko`) |
 | Média | Exportação do relatório HTML já gerado para o destino do backup, junto com o manifest |
 | Média | Verificação prévia de conectividade com o domínio antes de tentar `CreateProfile`, com aviso antecipado na UI |
+| Média | Mensagem de erro mais específica na UI quando a falha de SFTP for por host key desconhecida (hoje cai na mensagem genérica de falha de conexão) |
 | Baixa | Adição de ícone e metadados de versão no executável Windows |
 | Baixa | Histórico de backups: exibição de execuções anteriores na página Restaurar a partir de `list_backups` |
 | Baixa | Reconstrução de subdiretórios no modo `alternate` da restauração simples |
+| Baixa | Progresso em bytes (não apenas por arquivo) durante o upload SFTP |
 
 ---
 

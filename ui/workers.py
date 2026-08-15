@@ -20,9 +20,10 @@ from typing import Optional
 from PySide6.QtCore import QThread, Signal
 
 from core.scanner import scan_paths, scan_profile_path, total_size
-from core.backup import run_backup, run_multi_user_backup
+from core.backup import run_backup, run_multi_user_backup, find_latest_backup
 from core.report import generate_report, generate_multi_user_backup_report, generate_multi_user_restore_report
 from core.restore import run_restore, generate_restore_report, run_corporate_restore
+from core.sftp import SftpClient
 
 
 class ScanWorker(QThread):
@@ -126,6 +127,9 @@ class BackupWorker(QThread):
                     self.state.destination,
                     on_progress=on_user_progress,
                     stop_flag=lambda: self._stop_flag,
+                    backup_type=self.state.backup_type,
+                    previous_backup_dir=self.state.previous_backup_dir or None,
+                    compression_level=self.state.compression_level,
                 )
                 report_path, csv_path = generate_multi_user_backup_report(
                     result,
@@ -144,6 +148,9 @@ class BackupWorker(QThread):
                 self.state.destination,
                 on_progress=on_progress,
                 stop_flag=lambda: self._stop_flag,
+                backup_type=self.state.backup_type,
+                previous_backup_dir=self.state.previous_backup_dir or None,
+                compression_level=self.state.compression_level,
             )
             report_path = generate_report(
                 self.state.scanned, result, self.state.destination,
@@ -250,3 +257,120 @@ class CorporateRestoreWorker(QThread):
             self.finished_ok.emit(result, json_path, csv_path)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+def _sftp_client_from_state(state) -> SftpClient:
+    return SftpClient(
+        host=state.sftp_host,
+        port=state.sftp_port or 22,
+        username=state.sftp_username,
+        password=state.sftp_password,
+        private_key_path=state.sftp_private_key_path or None,
+    )
+
+
+class SftpTestWorker(QThread):
+    """Testa a conexão SFTP com os dados preenchidos na página Destino,
+    sem bloquear a UI (`SftpClient.connect()` pode demorar/travar em hosts
+    inacessíveis)."""
+
+    finished_ok = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, state, parent=None):
+        super().__init__(parent)
+        self.state = state
+
+    def run(self):
+        client = _sftp_client_from_state(self.state)
+        try:
+            if not client.connect():
+                self.failed.emit(
+                    "Não foi possível conectar. Verifique host, porta, usuário e senha/chave."
+                )
+                return
+            free_total = client.check_free_space(self.state.sftp_remote_path or ".")
+            if free_total:
+                from core.scanner import human_size
+                free, total = free_total
+                self.finished_ok.emit(
+                    f"Conexão OK — espaço livre no servidor: {human_size(free)} de {human_size(total)}"
+                )
+            else:
+                self.finished_ok.emit("Conexão OK.")
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            client.disconnect()
+
+
+class SftpUploadWorker(QThread):
+    """Envia o resultado de um backup (arquivo ZIP compactado, ou a pasta
+    de backup inteira quando não há compressão) para o destino SFTP
+    configurado em Configurações/Destino, após o backup local já ter sido
+    concluído com sucesso."""
+
+    progress = Signal(int, int, str)
+    finished_ok = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, state, local_path: str, parent=None):
+        super().__init__(parent)
+        self.state = state
+        self.local_path = local_path
+        self._stop_flag = False
+
+    def request_stop(self):
+        self._stop_flag = True
+
+    def run(self):
+        client = _sftp_client_from_state(self.state)
+        try:
+            if not client.connect():
+                self.failed.emit(
+                    "Não foi possível conectar ao servidor SFTP para enviar o backup."
+                )
+                return
+
+            remote_base = (self.state.sftp_remote_path or ".").rstrip("/") or "."
+
+            if os.path.isfile(self.local_path):
+                files = [self.local_path]
+            else:
+                files = []
+                for root, _dirs, names in os.walk(self.local_path):
+                    for name in names:
+                        files.append(os.path.join(root, name))
+
+            total = len(files)
+            if total == 0:
+                self.finished_ok.emit("Nada para enviar.")
+                return
+
+            base_dir = self.local_path if os.path.isdir(self.local_path) else os.path.dirname(self.local_path)
+            remote_dirs_created = set()
+
+            for i, local_file in enumerate(files):
+                if self._stop_flag:
+                    break
+                if os.path.isdir(self.local_path):
+                    relative = os.path.relpath(local_file, base_dir).replace(os.sep, "/")
+                else:
+                    relative = os.path.basename(local_file)
+                remote_file = f"{remote_base}/{relative}"
+                remote_dir = remote_file.rsplit("/", 1)[0]
+                if remote_dir and remote_dir not in remote_dirs_created:
+                    client.mkdir_p(remote_dir)
+                    remote_dirs_created.add(remote_dir)
+
+                self.progress.emit(i + 1, total, relative)
+                client.upload_file(local_file, remote_file)
+
+            if self._stop_flag:
+                self.finished_ok.emit(f"Envio interrompido ({i + 1}/{total} arquivos enviados).")
+            else:
+                self.finished_ok.emit(f"Envio concluído — {total} arquivo(s) enviado(s) para {remote_base}.")
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            client.disconnect()

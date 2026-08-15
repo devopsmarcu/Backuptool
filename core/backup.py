@@ -43,6 +43,18 @@ class BackupResult:
     compressed_path: str = ""
 
 
+def _unique_backup_dir(destination: str, ts: str) -> str:
+    """Garante um diretório de backup exclusivo mesmo se a resolução do
+    relógio do sistema não for suficiente para diferenciar duas execuções
+    muito próximas (ex.: full seguido de incremental em sequência)."""
+    candidate = os.path.join(destination, f"Backup_{ts}")
+    suffix = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(destination, f"Backup_{ts}_{suffix}")
+        suffix += 1
+    return candidate
+
+
 def run_backup(
     entries: List[FileEntry],
     destination: str,
@@ -55,8 +67,8 @@ def run_backup(
     result = BackupResult(backup_type=backup_type, compression_level=compression_level)
     total = len(entries)
 
-    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    backup_dir = os.path.join(destination, f"Backup_{ts}")
+    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S_%f")[:-3]
+    backup_dir = _unique_backup_dir(destination, ts)
     files_dir = os.path.join(backup_dir, "files")
     os.makedirs(files_dir, exist_ok=True)
     result.backup_dir = backup_dir
@@ -125,7 +137,7 @@ def run_backup(
 
     # Compress the backup if requested
     if compression_level != CompressionLevel.NONE:
-        zip_path = os.path.join(destination, f"Backup_{ts}.zip")
+        zip_path = os.path.join(destination, f"{os.path.basename(backup_dir)}.zip")
         
         def compression_progress(current: int, total: int, path: str):
             if on_progress:
@@ -372,8 +384,8 @@ def run_multi_user_backup(
 ) -> MultiUserBackupResult:
     started = datetime.now()
     result = MultiUserBackupResult(compression_level=compression_level)
-    ts = started.strftime("%Y-%m-%d_%H%M%S")
-    backup_dir = os.path.join(destination, f"Backup_{ts}")
+    ts = started.strftime("%Y-%m-%d_%H%M%S_%f")[:-3]
+    backup_dir = _unique_backup_dir(destination, ts)
     users_dir = os.path.join(backup_dir, "usuarios")
     os.makedirs(users_dir, exist_ok=True)
     result.backup_dir = backup_dir
@@ -411,7 +423,7 @@ def run_multi_user_backup(
 
     # Compress the multi-user backup if requested
     if compression_level != CompressionLevel.NONE:
-        zip_path = os.path.join(destination, f"Backup_{ts}.zip")
+        zip_path = os.path.join(destination, f"{os.path.basename(backup_dir)}.zip")
         
         def compression_progress(current: int, total: int, path: str):
             pass  # Handle progress in UI if needed

@@ -299,6 +299,7 @@ class MainWindow(QMainWindow):
         self.backup_page.lbl_last_activity.setText("Nenhuma atividade ainda.")
         self.backup_page.btn_start.setEnabled(True)
         self.backup_page.btn_stop.setEnabled(False)
+        self.backup_page.sftp_card.setVisible(False)
 
         self.restore_page.progressbar.setValue(0)
         self.restore_page.lbl_counter.setText("Progresso: 0 / 0 arquivos")
