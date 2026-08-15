@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QSizePolicy,
 )
 
-from styles.icons import icon_add
 from styles import dark_theme as theme
 from styles.svg_icons import icon_label
 
@@ -160,20 +159,24 @@ class EmptyState(QWidget):
 
         icon_lbl = icon_label(icon_name, size=40, color=theme.TEXT_DIM)
 
-        title_lbl = QLabel(title)
-        title_lbl.setObjectName("SectionTitle")
-        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_lbl = QLabel(title)
+        self.title_lbl.setObjectName("SectionTitle")
+        self.title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        desc_lbl = QLabel(description)
-        desc_lbl.setObjectName("Muted")
-        desc_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc_lbl.setWordWrap(True)
-        desc_lbl.setMaximumWidth(420)
+        self.desc_lbl = QLabel(description)
+        self.desc_lbl.setObjectName("Muted")
+        self.desc_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.desc_lbl.setWordWrap(True)
+        self.desc_lbl.setMaximumWidth(420)
 
         outer.addWidget(icon_lbl)
         outer.addSpacing(8)
-        outer.addWidget(title_lbl)
-        outer.addWidget(desc_lbl)
+        outer.addWidget(self.title_lbl)
+        outer.addWidget(self.desc_lbl)
+
+    def set_message(self, title: str, description: str):
+        self.title_lbl.setText(title)
+        self.desc_lbl.setText(description)
 
 
 class Divider(QFrame):
@@ -216,7 +219,7 @@ class SummaryStatCard(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 20, 16, 20)
         layout.setSpacing(12)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         icon_lbl = icon_label(icon_name, size=28, color=theme.ACCENT)
         layout.addWidget(icon_lbl, 0, Qt.AlignmentFlag.AlignCenter)
@@ -231,6 +234,8 @@ class SummaryStatCard(QFrame):
         self._value_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._value_lbl.setWordWrap(True)
         layout.addWidget(self._value_lbl, 0, Qt.AlignmentFlag.AlignCenter)
+
+        layout.addStretch(1)
 
     def set_value(self, value: str):
         self._value_lbl.setText(value)

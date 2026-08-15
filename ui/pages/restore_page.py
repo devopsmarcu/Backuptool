@@ -33,7 +33,7 @@ from styles.svg_icons import icon_html
 from ui.format_utils import format_duration, estimate_remaining, short_path, friendly_error
 from ui.os_utils import open_path
 from ui.state import AppState
-from ui.widgets import Card, SectionIntro, RestoreActionButton, DangerButton, SecondaryButton, MetricTile
+from ui.widgets import Card, SectionIntro, RestoreActionButton, DangerButton, SecondaryButton, MetricTile, EmptyState
 from ui.workers import RestoreWorker, CorporateRestoreWorker
 
 try:
@@ -91,10 +91,16 @@ class RestorePage(QWidget):
 
         # ── Validação / mapeamento ──
         val_card = Card("Validação e Mapeamento")
+        self.preview_empty = EmptyState(
+            "search", "Nenhum backup carregado",
+            "Selecione uma pasta de backup acima para ver os usuários encontrados e o mapeamento de restauração.",
+        )
+        val_card.body_layout().addWidget(self.preview_empty)
         self.preview_scroll = QScrollArea()
         self.preview_scroll.setWidgetResizable(True)
         self.preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.preview_scroll.setMinimumHeight(120)
+        self.preview_scroll.setVisible(False)
         self.preview_container = QWidget()
         self.preview_layout = QVBoxLayout(self.preview_container)
         self.preview_layout.addStretch(1)
@@ -266,28 +272,48 @@ class RestorePage(QWidget):
             )
             self.lbl_manifest_info.setStyleSheet("color: #22C55E;")
             self._populate_selection(manifest)
+            self.preview_empty.set_message(
+                "Backup de usuário único",
+                "Este backup não é multiusuário — não há mapeamento de perfis para revisar. "
+                "Configure o modo de restauração abaixo.",
+            )
         except FileNotFoundError:
             self.state.restore_manifest = None
             self.lbl_manifest_info.setText("Backup não reconhecido. Selecione a pasta criada pelo BackupTool.")
             self.lbl_manifest_info.setStyleSheet("color: #EF4444;")
+            self.preview_empty.set_message(
+                "Nenhum backup carregado",
+                "Selecione uma pasta de backup acima para ver os usuários encontrados e o mapeamento de restauração.",
+            )
         except Exception as exc:
             self.state.restore_manifest = None
             self.lbl_manifest_info.setText(friendly_error(exc))
             self.lbl_manifest_info.setStyleSheet("color: #EF4444;")
+            self.preview_empty.set_message(
+                "Nenhum backup carregado",
+                "Selecione uma pasta de backup acima para ver os usuários encontrados e o mapeamento de restauração.",
+            )
 
     @staticmethod
     def _human(n):
         from core.scanner import human_size
         return human_size(n)
 
+    def _set_preview_visible(self, visible: bool):
+        self.preview_empty.setVisible(not visible)
+        self.preview_scroll.setVisible(visible)
+
     def _clear_layout(self, layout):
         while layout.count() > 1:
             item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        if layout is self.preview_layout:
+            self._set_preview_visible(False)
 
     def _populate_corporate_preview(self):
         self._clear_layout(self.preview_layout)
+        self._set_preview_visible(True)
         for plan in self.state.corporate_restore_plans:
             user = plan.manifest.user or os.path.basename(plan.user_dir)
             ok = not (plan.missing_files or plan.corrupted_files)

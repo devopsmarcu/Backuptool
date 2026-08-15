@@ -16,8 +16,7 @@ from PySide6.QtWidgets import (
 
 from core.destinations import detect_external_drives
 from styles import dark_theme as theme
-from styles.icons import icon_drive, icon_refresh, icon_folder
-from styles.svg_icons import icon_html
+from styles.svg_icons import icon_html, icon_drive, icon_refresh, icon_folder
 from ui.state import AppState
 from ui.widgets import Card, SectionIntro, PrimaryButton, SecondaryButton, EmptyState
 from ui.workers import SftpTestWorker
@@ -30,7 +29,16 @@ class DestinationPage(QWidget):
         super().__init__(parent)
         self.state = state
 
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        content = QWidget()
+        scroll.setWidget(content)
+        root = QVBoxLayout(content)
         root.setContentsMargins(20, 18, 20, 18)
         root.setSpacing(14)
 
@@ -53,7 +61,7 @@ class DestinationPage(QWidget):
 
         refresh_row = QHBoxLayout()
         btn_refresh = SecondaryButton("Atualizar dispositivos")
-        btn_refresh.setIcon(icon_refresh(self))
+        btn_refresh.setIcon(icon_refresh())
         btn_refresh.clicked.connect(self.refresh_drives)
         refresh_row.addWidget(btn_refresh)
         refresh_row.addStretch(1)
@@ -66,7 +74,7 @@ class DestinationPage(QWidget):
         self.dest_entry.setPlaceholderText(r"Ex: \\servidor\backup  ou  /mnt/externo")
         self.dest_entry.textChanged.connect(self._on_text_changed)
         btn_browse = PrimaryButton("Procurar")
-        btn_browse.setIcon(icon_folder(self))
+        btn_browse.setIcon(icon_folder())
         btn_browse.clicked.connect(self._browse_dest)
         input_row.addWidget(self.dest_entry, 1)
         input_row.addWidget(btn_browse)
@@ -92,7 +100,9 @@ class DestinationPage(QWidget):
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        grid.setVerticalSpacing(10)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
 
         grid.addWidget(QLabel("Host:"), 0, 0)
         self.sftp_host_entry = QLineEdit(self.state.sftp_host)
@@ -186,7 +196,7 @@ class DestinationPage(QWidget):
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(10, 8, 10, 8)
             icon_lbl = QLabel()
-            icon_lbl.setPixmap(icon_drive(self).pixmap(20, 20))
+            icon_lbl.setPixmap(icon_drive(size=20).pixmap(20, 20))
             text_lbl = QLabel(f"{d['label']}  [{d['type']}]  —  {d['path']}")
             btn_use = PrimaryButton("Usar")
             btn_use.setFixedWidth(90)

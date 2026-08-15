@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QFileDialog, QLabel,
 )
 
-from styles.icons import icon_folder, icon_add, icon_remove
+from styles.svg_icons import icon_folder, icon_add, icon_remove
 from ui.state import AppState
 from ui.widgets import Card, SectionIntro, PrimaryButton, DangerButton
 
@@ -41,10 +41,10 @@ class SourcePage(QWidget):
 
         btn_row = QHBoxLayout()
         btn_add = PrimaryButton("Adicionar pasta")
-        btn_add.setIcon(icon_add(self))
+        btn_add.setIcon(icon_add())
         btn_add.clicked.connect(self._add_path)
         btn_remove = DangerButton("Remover selecionada")
-        btn_remove.setIcon(icon_remove(self))
+        btn_remove.setIcon(icon_remove())
         btn_remove.clicked.connect(self._remove_selected)
         btn_row.addWidget(btn_add)
         btn_row.addWidget(btn_remove)
@@ -59,7 +59,7 @@ class SourcePage(QWidget):
     def _refresh_list(self):
         self.list_widget.clear()
         for path in self.state.paths:
-            item = QListWidgetItem(icon_folder(self), path)
+            item = QListWidgetItem(icon_folder(), path)
             self.list_widget.addItem(item)
 
     def _add_path(self):

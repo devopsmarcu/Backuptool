@@ -22,7 +22,7 @@ import time
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QMessageBox,
-    QRadioButton, QButtonGroup, QComboBox, QLineEdit, QFileDialog,
+    QRadioButton, QButtonGroup, QComboBox, QLineEdit, QFileDialog, QScrollArea, QFrame,
 )
 
 from core.backup import find_latest_backup
@@ -58,7 +58,16 @@ class BackupPage(QWidget):
         self._sftp_worker: SftpUploadWorker | None = None
         self._started_at = 0.0
 
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        content = QWidget()
+        scroll.setWidget(content)
+        root = QVBoxLayout(content)
         root.setContentsMargins(20, 18, 20, 18)
         root.setSpacing(14)
 

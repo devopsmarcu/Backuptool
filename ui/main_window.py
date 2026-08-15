@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
 )
 
-from styles.icons import app_icon, icon_back, icon_forward, icon_refresh
+from styles.icons import app_icon
+from styles.svg_icons import icon_back, icon_forward, icon_refresh
 from ui.state import AppState
 from ui.toolbar import HeaderBar
 from ui.navigation import Stepper
@@ -174,15 +175,15 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(20, 10, 20, 10)
 
         self.btn_back = SecondaryButton("Voltar")
-        self.btn_back.setIcon(icon_back(self))
+        self.btn_back.setIcon(icon_back())
         self.btn_back.clicked.connect(self._go_back)
 
         self.btn_restart = SecondaryButton("Reiniciar Processo")
-        self.btn_restart.setIcon(icon_refresh(self))
+        self.btn_restart.setIcon(icon_refresh())
         self.btn_restart.clicked.connect(self._restart_process)
 
         self.btn_next = PrimaryButton("Próximo")
-        self.btn_next.setIcon(icon_forward(self))
+        self.btn_next.setIcon(icon_forward())
         self.btn_next.clicked.connect(self._go_next)
 
         row.addWidget(self.btn_back)
@@ -273,7 +274,10 @@ class MainWindow(QMainWindow):
         self.header.set_active_section("restore" if index == 5 else "backup")
         self.header.set_session_info(
             f"Etapa {index + 1} de {len(STEP_LABELS)}",
-            f"{STEP_DESCRIPTIONS[index]}\nMáquina: {self.state.technician}",
+            STEP_DESCRIPTIONS[index],
+        )
+        self.header.lbl_info_sub.setToolTip(
+            f"{STEP_DESCRIPTIONS[index]}\nMáquina: {self.state.technician}"
         )
         self.statusbar.set_status(STEP_DESCRIPTIONS[index])
 

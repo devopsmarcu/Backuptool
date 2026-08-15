@@ -34,7 +34,7 @@ class HeaderBar(QFrame):
     def __init__(self, app_name: str = "BackupTool", parent=None):
         super().__init__(parent)
         self.setObjectName("HeaderBar")
-        self.setFixedHeight(64)
+        self.setFixedHeight(76)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 8, 20, 8)
@@ -88,7 +88,7 @@ class HeaderBar(QFrame):
         self.lbl_info_sub.setObjectName("SessionInfoSub")
         self.lbl_info_sub.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.lbl_info_sub.setWordWrap(True)
-        self.lbl_info_sub.setMaximumWidth(320)
+        self.lbl_info_sub.setMaximumWidth(380)
         info_box.addWidget(self.lbl_info_title)
         info_box.addWidget(self.lbl_info_sub)
         info_widget = QFrame()
@@ -104,3 +104,4 @@ class HeaderBar(QFrame):
     def set_session_info(self, title: str, subtitle: str):
         self.lbl_info_title.setText(title)
         self.lbl_info_sub.setText(subtitle)
+        self.lbl_info_sub.setToolTip(subtitle)

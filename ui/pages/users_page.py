@@ -12,16 +12,18 @@ chamada exatamente como antes.
 
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QAbstractItemView, QHeaderView,
-    QLabel, QMessageBox, QSizePolicy,
+    QLabel, QMessageBox, QSizePolicy, QFileDialog, QInputDialog,
 )
 
 from core.profiles import detect_user_profiles, UserProfile
 from styles import dark_theme as theme
-from styles.icons import icon_add, icon_remove, icon_refresh
+from styles.svg_icons import icon_add, icon_remove, icon_refresh
 from ui.state import AppState
 from ui.widgets import SectionIntro, SearchBox, SecondaryButton, DangerButton, EmptyState
 
@@ -52,6 +54,25 @@ class UserProfilesModel(QAbstractTableModel):
             bottom = self.index(len(self._profiles) - 1, 0)
             self.dataChanged.emit(top, bottom, [Qt.ItemDataRole.CheckStateRole])
         self.selection_changed.emit()
+
+    def add_profile(self, profile: UserProfile):
+        row = len(self._profiles)
+        self.beginInsertRows(QModelIndex(), row, row)
+        self._profiles.append(profile)
+        self._checked[profile.username] = True
+        self.endInsertRows()
+        self.selection_changed.emit()
+
+    def remove_checked(self):
+        keep = [p for p in self._profiles if not self._checked.get(p.username, False)]
+        self.beginResetModel()
+        self._profiles = keep
+        self._checked = {p.username: self._checked.get(p.username, True) for p in keep}
+        self.endResetModel()
+        self.selection_changed.emit()
+
+    def has_username(self, username: str) -> bool:
+        return any(p.username.lower() == username.lower() for p in self._profiles)
 
     def checked_profiles(self) -> list[UserProfile]:
         return [p for p in self._profiles if self._checked.get(p.username, False)]
@@ -141,10 +162,10 @@ class UsersPage(QWidget):
         top_bar.addWidget(self.search, 1)
 
         btn_add = SecondaryButton("Adicionar Usuário")
-        btn_add.setIcon(icon_add(self))
+        btn_add.setIcon(icon_add())
         btn_add.clicked.connect(self._add_user_manual)
         btn_remove = DangerButton("Remover Selecionados")
-        btn_remove.setIcon(icon_remove(self))
+        btn_remove.setIcon(icon_remove())
         btn_remove.clicked.connect(self._remove_selected)
         top_bar.addWidget(btn_add)
         top_bar.addWidget(btn_remove)
@@ -185,7 +206,7 @@ class UsersPage(QWidget):
         self.btn_select_all = SecondaryButton("Selecionar Todos")
         self.btn_select_all.clicked.connect(self._select_all)
         self.btn_refresh = SecondaryButton("Atualizar Usuários")
-        self.btn_refresh.setIcon(icon_refresh(self))
+        self.btn_refresh.setIcon(icon_refresh())
         self.btn_refresh.clicked.connect(self.refresh_users)
         bottom_bar.addWidget(self.btn_select_all)
         bottom_bar.addWidget(self.btn_refresh)
@@ -204,11 +225,27 @@ class UsersPage(QWidget):
         self.model.set_profiles(profiles)
         self.table.resizeRowsToContents()
         self._sync_state()
+        self._update_empty_state()
+
+    def _update_empty_state(self):
+        has_rows = self.proxy.rowCount() > 0
+        self.empty_state.setVisible(not has_rows)
+        self.table.setVisible(has_rows)
+        if not has_rows and not self.model.rowCount():
+            self.empty_state.set_message(
+                "Nenhum usuário encontrado",
+                "Nenhum perfil de usuário foi detectado nesta máquina. "
+                "Clique em \"Atualizar Usuários\" ou adicione um manualmente.",
+            )
+        elif not has_rows:
+            self.empty_state.set_message(
+                "Nenhum resultado para o filtro",
+                "Ajuste o termo de busca ou limpe o filtro para ver todos os usuários.",
+            )
 
     def _on_filter_changed(self, text: str):
         self.proxy.setFilterRegularExpression(text)
-        self.empty_state.setVisible(self.proxy.rowCount() == 0)
-        self.table.setVisible(self.proxy.rowCount() != 0)
+        self._update_empty_state()
 
     def _on_row_clicked(self, proxy_index):
         # Clicar em qualquer parte da linha alterna o checkbox (melhora a UX
@@ -230,13 +267,52 @@ class UsersPage(QWidget):
         self.lbl_status.setText(f"{len(selected)} usuários selecionados")
 
     def _add_user_manual(self):
-        QMessageBox.information(
-            self, "Funcionalidade",
-            "A adição manual de usuários será implementada na versão 2.2.",
+        folder = QFileDialog.getExistingDirectory(
+            self, "Selecionar pasta do perfil do usuário",
         )
+        if not folder:
+            return
+
+        default_name = os.path.basename(folder.rstrip("/\\")) or folder
+        username, ok = QInputDialog.getText(
+            self, "Adicionar Usuário",
+            "Nome do usuário para este perfil:",
+            text=default_name,
+        )
+        if not ok or not username.strip():
+            return
+        username = username.strip()
+
+        if self.model.has_username(username):
+            QMessageBox.warning(
+                self, "Usuário já existe",
+                f'Já existe um usuário chamado "{username}" na lista.',
+            )
+            return
+
+        self.model.add_profile(UserProfile(username=username, path=folder))
+        self.state.user_profiles = list(self.state.user_profiles) + [UserProfile(username=username, path=folder)]
+        self.table.resizeRowsToContents()
+        self._sync_state()
+        self._update_empty_state()
 
     def _remove_selected(self):
-        QMessageBox.warning(
-            self, "Remover Usuário",
-            "Por favor, desmarque o checkbox do usuário para removê-lo do backup.",
+        checked = self.model.checked_profiles()
+        if not checked:
+            QMessageBox.information(
+                self, "Nenhum usuário marcado",
+                "Marque o checkbox dos usuários que deseja remover da lista.",
+            )
+            return
+        names = ", ".join(p.username for p in checked)
+        confirm = QMessageBox.question(
+            self, "Remover Usuários",
+            f"Remover {len(checked)} usuário(s) da lista de backup?\n\n{names}\n\n"
+            "Isso apenas remove da lista desta execução — não apaga nada em disco.",
         )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self.model.remove_checked()
+        self.state.user_profiles = [p for p in self.state.user_profiles if p.username not in {c.username for c in checked}]
+        self._sync_state()
+        self._update_empty_state()

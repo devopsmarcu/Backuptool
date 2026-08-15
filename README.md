@@ -27,6 +27,7 @@ O BackupTool foi desenvolvido para uso por técnicos de TI no contexto de format
 - **Relatórios em HTML, além de JSON/CSV**: `core/report.py` gera relatório navegável em HTML para backups e restaurações
 - **Suíte de testes com `pytest`**: `tests/` cobre backup, compressão e manifest
 - **Correção de estabilidade**: nomes de pastas de backup agora incluem milissegundos e um sufixo de desempate, evitando colisão de nome ao rodar dois backups em sequência muito rápida (ex.: full seguido de incremental)
+- **Correções de UI/polimento visual**: corrigido card de SFTP quebrado (faltava rolagem de página em `destination_page.py`/`backup_page.py`), estado vazio ausente na tabela de usuários, botões "Adicionar Usuário"/"Remover Selecionados" que eram apenas placeholders, cards de Resumo com espaço desproporcional, painel "Etapa X de 6" cortando texto, e substituição dos ícones nativos do SO (que destoavam do tema, parecendo emojis) por um conjunto SVG consistente
 
 ---
 
@@ -363,7 +364,7 @@ O técnico pode voltar livremente para qualquer etapa já visitada clicando no s
 
 ### Limitações identificadas
 
-- **`build.py` ainda referencia a stack antiga** (`--hidden-import=customtkinter`) e não foi atualizado para PySide6; um build gerado com o script atual tende a falhar ou ficar incompleto até esse ajuste
+- **`build.py` ainda referencia a stack antiga** (`--hidden-import=customtkinter`) e não foi atualizado para PySide6, e não define `--icon` para o executável Windows (o ícone em `resources/icons/icon.ico` só é aplicado em tempo de execução via `QIcon`, não no `.exe` empacotado)
 - O modo `alternate` na restauração simples não reconstrói a estrutura de subdiretórios
 - A detecção de drives no Linux depende de `lsblk`; ambientes sem `util-linux` podem não detectar dispositivos automaticamente
 - `CreateProfile`/resolução de SID dependem de a estação estar corretamente ingressada no domínio e de o controlador de domínio estar acessível; em cenários offline, a restauração cai para o destino heurístico
