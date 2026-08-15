@@ -106,7 +106,7 @@ class DestinationPage(QWidget):
 
         grid.addWidget(QLabel("Host:"), 0, 0)
         self.sftp_host_entry = QLineEdit(self.state.sftp_host)
-        self.sftp_host_entry.setPlaceholderText("ex.: backup.empresa.local")
+        self.sftp_host_entry.setPlaceholderText("ex.: backup.example.local")
         grid.addWidget(self.sftp_host_entry, 0, 1)
 
         grid.addWidget(QLabel("Porta:"), 0, 2)

@@ -542,7 +542,7 @@ GNU General Public License v3.0 — ver [`LICENSE`](./LICENSE).
 
 ## Autor
 
-Não identificado no código-fonte. `app.setOrganizationName("Santa Casa da Bahia")` em `main.py` indica a organização para a qual a ferramenta foi desenvolvida.
+Desenvolvido para uso em ambientes corporativos. O projeto é distribuído sob a licença GNU GPL v3.0.
 
 ---
 
