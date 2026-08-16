@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
 )
 
+from config.paths import get_logs_dir
 from styles.icons import app_icon
 from styles.svg_icons import icon_back, icon_forward, icon_refresh
 from ui.state import AppState
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
     def __init__(self, project_root: str, parent=None):
         super().__init__(parent)
         self.project_root = project_root
-        self.logs_dir = os.path.join(project_root, "logs")
+        self.logs_dir = str(get_logs_dir())
         os.makedirs(self.logs_dir, exist_ok=True)
 
         self.state = AppState()

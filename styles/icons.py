@@ -18,13 +18,12 @@ from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPainterPath
 from PySide6.QtWidgets import QStyle, QWidget
 
+from config.paths import get_resource_path
 from styles.dark_theme import ACCENT, TEXT_MAIN
 
-# project_root/styles/icons.py -> project_root/
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-ICON_ICO_PATH = PROJECT_ROOT / "resources" / "icons" / "icon.ico"
-LOGO_PNG_PATH = PROJECT_ROOT / "resources" / "images" / "icone.png"
+# Assets paths resolved via centralized path manager
+ICON_ICO_PATH = get_resource_path("resources/icons/icon.ico")
+LOGO_PNG_PATH = get_resource_path("resources/images/icone.png")
 
 
 # ----------------------------------------------------------------------

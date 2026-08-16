@@ -4,6 +4,7 @@ import os
 import sys
 from dotenv import load_dotenv
 
+from config.paths import get_app_dir, get_config_path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 
@@ -11,10 +12,10 @@ from styles.dark_theme import build_stylesheet
 from styles.icons import app_icon
 from ui.main_window import MainWindow
 
-# Load configuration from .env file
-load_dotenv()
+# Load configuration from .env file located in the app directory
+load_dotenv(dotenv_path=get_config_path(".env"))
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = str(get_app_dir())
 
 def main() -> int:
     app = QApplication(sys.argv)
